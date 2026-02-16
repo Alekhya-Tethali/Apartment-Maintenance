@@ -6,8 +6,9 @@ import NavBar from "@/components/NavBar";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import FlatGrid from "@/components/FlatGrid";
+import type { FlatStatus } from "@/components/FlatGrid";
 import Toast from "@/components/ui/Toast";
-import { type PaymentStatus, type PaymentMode, PAYMENT_MODE_LABELS, STATUS_LABELS } from "@/lib/constants";
+import { type PaymentStatus, type PaymentMode, PAYMENT_MODE_LABELS, STATUS_LABELS, STATUS_LABELS_LONG } from "@/lib/constants";
 
 interface FlatData {
   id: number;
@@ -37,12 +38,13 @@ interface PaymentData {
   paymentDate?: string;
 }
 
-interface FlatStatusItem {
-  flatNumber: string;
+interface ReminderData {
+  id: number;
   flatId: number;
-  amount: number;
-  status: PaymentStatus | "not_paid" | "overdue";
-  paymentId?: number;
+  flatNumber: string;
+  monthId: number;
+  sentBy: string;
+  sentAt: string;
 }
 
 const formatPaymentDate = (dateStr: string) => {
@@ -80,9 +82,13 @@ function AdminDashboard() {
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
   // Flat history modal
-  const [modalFlat, setModalFlat] = useState<FlatStatusItem | null>(null);
+  const [modalFlat, setModalFlat] = useState<FlatStatus | null>(null);
   const [flatPayments, setFlatPayments] = useState<PaymentData[]>([]);
   const [loadingFlatHistory, setLoadingFlatHistory] = useState(false);
+
+  // Reminders
+  const [reminders, setReminders] = useState<ReminderData[]>([]);
+  const [remindingFlatId, setRemindingFlatId] = useState<number | null>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -119,7 +125,19 @@ function AdminDashboard() {
     loadData();
   }, [loadData]);
 
-  const handleFlatClick = async (flat: FlatStatusItem) => {
+  const loadReminders = useCallback(async () => {
+    if (!selectedMonth) return;
+    try {
+      const res = await fetch(`/api/reminders?monthId=${selectedMonth.id}`);
+      if (res.ok) setReminders(await res.json());
+    } catch { /* silently fail */ }
+  }, [selectedMonth]);
+
+  useEffect(() => {
+    loadReminders();
+  }, [loadReminders]);
+
+  const handleFlatClick = async (flat: FlatStatus) => {
     setModalFlat(flat);
     setLoadingFlatHistory(true);
     setFlatPayments([]);
@@ -141,6 +159,26 @@ function AdminDashboard() {
     setFlatPayments([]);
   };
 
+  const handleRemind = async (flatId: number) => {
+    if (!selectedMonth) return;
+    setRemindingFlatId(flatId);
+    try {
+      const res = await fetch("/api/reminders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ flatId, monthId: selectedMonth.id }),
+      });
+      if (res.ok) {
+        setToast({ message: "Reminder recorded!", type: "success" });
+        loadReminders();
+      }
+    } catch {
+      setToast({ message: "Failed to record reminder", type: "error" });
+    } finally {
+      setRemindingFlatId(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -153,11 +191,12 @@ function AdminDashboard() {
     (p) => selectedMonth && p.monthId === selectedMonth.id
   );
 
-  const gridData: FlatStatusItem[] = allFlats.map((flat) => {
+  const gridData: FlatStatus[] = allFlats.map((flat) => {
     const payment = monthPayments.find((p) => p.flatId === flat.id);
     const isOverdue = selectedMonth
       ? selectedMonth.status === "open" && new Date().getDate() > selectedMonth.dueDateDay
       : false;
+    const lastReminder = reminders.find((r) => r.flatId === flat.id);
     return {
       flatNumber: flat.flatNumber,
       flatId: flat.id,
@@ -168,6 +207,7 @@ function AdminDashboard() {
           ? ("overdue" as const)
           : ("not_paid" as const),
       paymentId: payment?.id,
+      lastRemindedAt: lastReminder?.sentAt || null,
     };
   });
 
@@ -395,7 +435,7 @@ function AdminDashboard() {
                                   : "bg-yellow-100 text-yellow-700"
                           }`}
                         >
-                          {STATUS_LABELS[p.status] || p.status}
+                          {STATUS_LABELS_LONG[p.status] || p.status}
                         </span>
                       </div>
                       <div className="text-sm text-slate-600">
@@ -411,6 +451,46 @@ function AdminDashboard() {
                   ))}
                 </div>
               )}
+
+              {/* Reminder History */}
+              {(() => {
+                const flatReminders = reminders.filter((r) => r.flatId === modalFlat.flatId);
+                if (flatReminders.length === 0) return null;
+                return (
+                  <div className="mt-4 pt-4 border-t border-slate-200">
+                    <h4 className="text-sm font-semibold text-slate-600 mb-2">Reminder History</h4>
+                    <div className="space-y-1">
+                      {flatReminders.map((r) => (
+                        <div key={r.id} className="text-xs text-slate-500 flex justify-between">
+                          <span>By {r.sentBy}</span>
+                          <span>{new Date(r.sentAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Remind Button - only for defaulters in open months */}
+              {selectedMonth?.status === "open" && (modalFlat.status === "not_paid" || modalFlat.status === "overdue") && (() => {
+                const lastReminder = reminders.find((r) => r.flatId === modalFlat.flatId);
+                const cooldownMs = 2 * 24 * 60 * 60 * 1000;
+                const canRemind = !lastReminder || (Date.now() - new Date(lastReminder.sentAt).getTime() > cooldownMs);
+
+                return (
+                  <div className="mt-4 pt-4 border-t border-slate-200">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      loading={remindingFlatId === modalFlat.flatId}
+                      disabled={!canRemind}
+                      onClick={() => handleRemind(modalFlat.flatId)}
+                    >
+                      {canRemind ? "Mark as Reminded" : "Reminded recently"}
+                    </Button>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>

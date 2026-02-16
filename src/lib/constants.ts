@@ -41,11 +41,20 @@ export const STATUS_COLORS: Record<PaymentStatus, string> = {
 };
 
 export const STATUS_LABELS: Record<PaymentStatus, string> = {
-  pending_verification: "Pending Verification",
-  pending_security: "Pending Security",
+  pending_verification: "Admin Verification",
+  pending_security: "Security Confirm",
   pending_collection: "Collect from Security",
   paid: "Paid",
   rejected: "Rejected",
+};
+
+// Longer labels for detail views / modals
+export const STATUS_LABELS_LONG: Record<PaymentStatus, string> = {
+  pending_verification: "Awaiting Admin Approval",
+  pending_security: "Awaiting Security Confirmation",
+  pending_collection: "Cash — Collect from Security",
+  paid: "Paid",
+  rejected: "Rejected by Admin",
 };
 
 export const FLAT_GRID_COLORS: Record<string, string> = {

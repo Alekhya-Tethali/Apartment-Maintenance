@@ -5,12 +5,13 @@ import NavBar from "@/components/NavBar";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import FlatGrid from "@/components/FlatGrid";
+import type { FlatStatus } from "@/components/FlatGrid";
 import Toast from "@/components/ui/Toast";
 import {
   type PaymentStatus,
   type PaymentMode,
   PAYMENT_MODE_LABELS,
-  STATUS_LABELS,
+  STATUS_LABELS_LONG,
 } from "@/lib/constants";
 
 interface FlatData {
@@ -54,14 +55,6 @@ interface ReminderData {
   sentAt: string;
 }
 
-interface FlatStatusItem {
-  flatNumber: string;
-  flatId: number;
-  amount: number;
-  status: PaymentStatus | "not_paid" | "overdue";
-  paymentId?: number;
-}
-
 const MONTH_NAMES = [
   "Jan",
   "Feb",
@@ -94,7 +87,7 @@ export default function SecurityDashboard() {
   const [remindingFlatId, setRemindingFlatId] = useState<number | null>(null);
 
   // Flat history modal
-  const [modalFlat, setModalFlat] = useState<FlatStatusItem | null>(null);
+  const [modalFlat, setModalFlat] = useState<FlatStatus | null>(null);
   const [flatPayments, setFlatPayments] = useState<PaymentData[]>([]);
   const [loadingFlatHistory, setLoadingFlatHistory] = useState(false);
 
@@ -199,7 +192,7 @@ export default function SecurityDashboard() {
     }
   };
 
-  const handleFlatClick = async (flat: FlatStatusItem) => {
+  const handleFlatClick = async (flat: FlatStatus) => {
     setModalFlat(flat);
     setLoadingFlatHistory(true);
     setFlatPayments([]);
@@ -242,12 +235,13 @@ export default function SecurityDashboard() {
     (p) => selectedMonth && p.monthId === selectedMonth.id
   );
 
-  const gridData: FlatStatusItem[] = allFlats.map((flat) => {
+  const gridData: FlatStatus[] = allFlats.map((flat) => {
     const payment = monthPayments.find((p) => p.flatId === flat.id);
     const isOverdue = selectedMonth
       ? selectedMonth.status === "open" &&
         new Date().getDate() > selectedMonth.dueDateDay
       : false;
+    const lastReminder = reminders.find((r) => r.flatId === flat.id);
 
     return {
       flatNumber: flat.flatNumber,
@@ -259,6 +253,7 @@ export default function SecurityDashboard() {
           ? ("overdue" as const)
           : ("not_paid" as const),
       paymentId: payment?.id,
+      lastRemindedAt: lastReminder?.sentAt || null,
     };
   });
 
@@ -272,26 +267,6 @@ export default function SecurityDashboard() {
       f.status === "pending_collection" ||
       f.status === "pending_verification"
   ).length;
-
-  // Defaulters: flats with no payment or rejected/overdue/not_paid
-  const defaulters = gridData.filter(
-    (f) => f.status === "not_paid" || f.status === "overdue"
-  );
-
-  // Find the latest reminder for each flat
-  const getLastReminder = (flatId: number): ReminderData | undefined => {
-    return reminders.find((r) => r.flatId === flatId);
-  };
-
-  const formatReminderDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString("en-IN", {
-      day: "numeric",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
 
   const formatPaymentDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -409,53 +384,6 @@ export default function SecurityDashboard() {
               </div>
             )}
 
-            {/* Defaulters Section */}
-            {defaulters.length > 0 && (
-              <div>
-                <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-2 px-1">
-                  Defaulters ({defaulters.length})
-                </h3>
-                <div className="space-y-2">
-                  {defaulters.map((flat) => {
-                    const lastReminder = getLastReminder(flat.flatId);
-                    return (
-                      <Card key={flat.flatId}>
-                        <div className="flex justify-between items-center">
-                          <div>
-                            <div className="font-bold text-slate-800">
-                              Flat {flat.flatNumber}
-                            </div>
-                            <div className="text-sm text-slate-500">
-                              ₹{flat.amount.toLocaleString("en-IN")} —{" "}
-                              {flat.status === "overdue"
-                                ? "Overdue"
-                                : "Not Paid"}
-                            </div>
-                            {lastReminder && (
-                              <div className="text-xs text-blue-600 mt-1">
-                                Last reminded:{" "}
-                                {formatReminderDate(lastReminder.sentAt)}
-                              </div>
-                            )}
-                          </div>
-                          {!isMonthClosed && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              loading={remindingFlatId === flat.flatId}
-                              onClick={() => handleRemind(flat.flatId)}
-                              className="!w-auto"
-                            >
-                              Reminded
-                            </Button>
-                          )}
-                        </div>
-                      </Card>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
           </>
         ) : (
           <Card>
@@ -535,7 +463,7 @@ export default function SecurityDashboard() {
                                   : "bg-yellow-100 text-yellow-700"
                           }`}
                         >
-                          {STATUS_LABELS[p.status] || p.status}
+                          {STATUS_LABELS_LONG[p.status] || p.status}
                         </span>
                       </div>
                       <div className="text-sm text-slate-600">
@@ -551,6 +479,47 @@ export default function SecurityDashboard() {
                   ))}
                 </div>
               )}
+
+              {/* Reminder History */}
+              {(() => {
+                const flatReminders = reminders.filter((r) => r.flatId === modalFlat.flatId);
+                if (flatReminders.length === 0) return null;
+                return (
+                  <div className="mt-4 pt-4 border-t border-slate-200">
+                    <h4 className="text-sm font-semibold text-slate-600 mb-2">Reminder History</h4>
+                    <div className="space-y-1">
+                      {flatReminders.map((r) => (
+                        <div key={r.id} className="text-xs text-slate-500 flex justify-between">
+                          <span>By {r.sentBy}</span>
+                          <span>{new Date(r.sentAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Remind Button */}
+              {!isMonthClosed && (modalFlat.status === "not_paid" || modalFlat.status === "overdue") && (() => {
+                const lastReminder = reminders.find((r) => r.flatId === modalFlat.flatId);
+                const cooldownMs = 2 * 24 * 60 * 60 * 1000; // 2 days
+                const canRemind = !lastReminder || (Date.now() - new Date(lastReminder.sentAt).getTime() > cooldownMs);
+
+                return (
+                  <div className="mt-4 pt-4 border-t border-slate-200">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      loading={remindingFlatId === modalFlat.flatId}
+                      disabled={!canRemind}
+                      onClick={() => handleRemind(modalFlat.flatId)}
+                      className="w-full"
+                    >
+                      {canRemind ? "Mark as Reminded" : "Reminded recently"}
+                    </Button>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>
