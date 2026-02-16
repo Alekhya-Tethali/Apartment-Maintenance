@@ -168,12 +168,51 @@ export default function AdminSettings() {
 
         {/* Flats Tab */}
         {tab === "flats" && (
-          <div className="space-y-2">
-            {flats.map((flat) => (
-              <Card key={flat.id}>
-                {editingFlat === flat.id ? (
+          <div className="space-y-3">
+            {/* Compact grid of flats */}
+            <div className="grid grid-cols-3 gap-2">
+              {flats.map((flat) => (
+                <button
+                  key={flat.id}
+                  onClick={() => {
+                    if (editingFlat === flat.id) {
+                      setEditingFlat(null);
+                    } else {
+                      startEditing(flat);
+                    }
+                  }}
+                  className={`rounded-xl p-3 text-center transition-all border-2
+                    ${editingFlat === flat.id
+                      ? "bg-blue-50 border-blue-500 shadow-sm"
+                      : "bg-white border-slate-200 hover:border-slate-300 hover:shadow-sm active:scale-95"}`}
+                >
+                  <div className="text-xl font-bold text-slate-800">{flat.flatNumber}</div>
+                  <div className="text-xs text-slate-500 mt-0.5">₹{flat.maintenanceAmount.toLocaleString("en-IN")}</div>
+                  {flat.hasPhone && (
+                    <div className="text-[10px] text-green-600 mt-0.5">Phone set</div>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {/* Edit panel - appears below grid when a flat is selected */}
+            {editingFlat && (() => {
+              const flat = flats.find((f) => f.id === editingFlat);
+              if (!flat) return null;
+              return (
+                <Card>
                   <div className="space-y-3">
-                    <div className="font-bold text-slate-800">Flat {flat.flatNumber}</div>
+                    <div className="flex justify-between items-center">
+                      <div className="font-bold text-lg text-slate-800">Flat {flat.flatNumber}</div>
+                      <button
+                        onClick={() => setEditingFlat(null)}
+                        className="p-1 hover:bg-slate-100 rounded-lg"
+                      >
+                        <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
                     <div>
                       <label className="text-xs text-slate-500">Amount (₹)</label>
                       <input
@@ -195,7 +234,7 @@ export default function AdminSettings() {
                       />
                     </div>
                     <div>
-                      <label className="text-xs text-slate-500">Phone (with country code, e.g., 919876543210)</label>
+                      <label className="text-xs text-slate-500">Phone (with country code)</label>
                       <input
                         type="tel"
                         value={editPhone}
@@ -204,31 +243,13 @@ export default function AdminSettings() {
                         placeholder="919876543210"
                       />
                     </div>
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm" onClick={() => setEditingFlat(null)}>
-                        Cancel
-                      </Button>
-                      <Button variant="success" size="sm" loading={saving} onClick={handleSaveFlat}>
-                        Save
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <div className="font-bold text-slate-800">Flat {flat.flatNumber}</div>
-                      <div className="text-sm text-slate-500">
-                        ₹{flat.maintenanceAmount.toLocaleString("en-IN")}
-                        {flat.hasPhone ? " — Phone set" : ""}
-                      </div>
-                    </div>
-                    <Button variant="outline" size="sm" onClick={() => startEditing(flat)}>
-                      Edit
+                    <Button variant="success" size="sm" loading={saving} onClick={handleSaveFlat}>
+                      Save Changes
                     </Button>
                   </div>
-                )}
-              </Card>
-            ))}
+                </Card>
+              );
+            })()}
           </div>
         )}
 

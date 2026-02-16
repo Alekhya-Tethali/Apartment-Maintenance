@@ -189,24 +189,57 @@ function AdminDashboard() {
       <NavBar title="Laurel Residency" subtitle="Admin" />
 
       <main className="max-w-lg mx-auto p-4 space-y-4">
-        {/* Month Selector */}
-        <div className="flex gap-2 overflow-x-auto pb-2">
-          {allMonths.map((m) => (
-            <button
-              key={m.id}
-              onClick={() => setSelectedMonth(m)}
-              className={`px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all
-                ${selectedMonth?.id === m.id
-                  ? "bg-blue-600 text-white"
-                  : m.status === "closed"
-                    ? "bg-slate-200 text-slate-500"
-                    : "bg-white text-slate-600 border border-slate-200"}`}
-            >
-              {MONTH_NAMES[m.month - 1]} {m.year}
-              {m.status === "closed" && " ✓"}
-            </button>
-          ))}
-        </div>
+        {/* Month Selector with Year Grouping */}
+        {(() => {
+          const years = [...new Set(allMonths.map((m) => m.year))].sort((a, b) => b - a);
+          const selectedYear = selectedMonth?.year || years[0];
+          const yearMonths = allMonths
+            .filter((m) => m.year === selectedYear)
+            .sort((a, b) => b.month - a.month);
+
+          return (
+            <div className="space-y-2">
+              {/* Year selector (only if multiple years) */}
+              {years.length > 1 && (
+                <div className="flex gap-2 overflow-x-auto">
+                  {years.map((y) => (
+                    <button
+                      key={y}
+                      onClick={() => {
+                        const firstOfYear = allMonths.find((m) => m.year === y);
+                        if (firstOfYear) setSelectedMonth(firstOfYear);
+                      }}
+                      className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all
+                        ${selectedYear === y
+                          ? "bg-slate-800 text-white"
+                          : "bg-slate-100 text-slate-500"}`}
+                    >
+                      {y}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {/* Month pills for selected year */}
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {yearMonths.map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => setSelectedMonth(m)}
+                    className={`px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all
+                      ${selectedMonth?.id === m.id
+                        ? "bg-blue-600 text-white"
+                        : m.status === "closed"
+                          ? "bg-slate-200 text-slate-500"
+                          : "bg-white text-slate-600 border border-slate-200"}`}
+                  >
+                    {MONTH_NAMES[m.month - 1]}
+                    {m.status === "closed" && " \u2713"}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
 
         {selectedMonth && (
           <>
