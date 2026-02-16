@@ -6,7 +6,12 @@ import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import FlatGrid from "@/components/FlatGrid";
 import Toast from "@/components/ui/Toast";
-import { type PaymentStatus, type PaymentMode, PAYMENT_MODE_LABELS } from "@/lib/constants";
+import {
+  type PaymentStatus,
+  type PaymentMode,
+  PAYMENT_MODE_LABELS,
+  STATUS_LABELS,
+} from "@/lib/constants";
 
 interface FlatData {
   id: number;
@@ -31,18 +36,67 @@ interface PaymentData {
   paymentMode: PaymentMode;
   status: PaymentStatus;
   submittedAt: string;
+  month?: number;
+  year?: number;
+  paymentDate?: string;
+  securityConfirmedAt?: string;
+  verifiedAt?: string;
+  collectedAt?: string;
+  adminNote?: string;
 }
 
-const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+interface ReminderData {
+  id: number;
+  flatId: number;
+  flatNumber: string;
+  monthId: number;
+  sentBy: string;
+  sentAt: string;
+}
+
+interface FlatStatusItem {
+  flatNumber: string;
+  flatId: number;
+  amount: number;
+  status: PaymentStatus | "not_paid" | "overdue";
+  paymentId?: number;
+}
+
+const MONTH_NAMES = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
 
 export default function SecurityDashboard() {
   const [allFlats, setAllFlats] = useState<FlatData[]>([]);
-  const [openMonths, setOpenMonths] = useState<MonthData[]>([]);
+  const [allMonths, setAllMonths] = useState<MonthData[]>([]);
   const [payments, setPayments] = useState<PaymentData[]>([]);
   const [selectedMonth, setSelectedMonth] = useState<MonthData | null>(null);
   const [loading, setLoading] = useState(true);
   const [confirmingId, setConfirmingId] = useState<number | null>(null);
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [toast, setToast] = useState<{
+    message: string;
+    type: "success" | "error";
+  } | null>(null);
+
+  // Reminders
+  const [reminders, setReminders] = useState<ReminderData[]>([]);
+  const [remindingFlatId, setRemindingFlatId] = useState<number | null>(null);
+
+  // Flat history modal
+  const [modalFlat, setModalFlat] = useState<FlatStatusItem | null>(null);
+  const [flatPayments, setFlatPayments] = useState<PaymentData[]>([]);
+  const [loadingFlatHistory, setLoadingFlatHistory] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -56,11 +110,15 @@ export default function SecurityDashboard() {
       const paymentsData = await paymentsRes.json();
 
       setAllFlats(flatsData);
-      setOpenMonths(monthsData);
+      setAllMonths(monthsData);
       setPayments(paymentsData);
 
       if (!selectedMonth && monthsData.length > 0) {
-        setSelectedMonth(monthsData[0]);
+        // Default to the first open month, otherwise the most recent
+        const openMonth = monthsData.find(
+          (m: MonthData) => m.status === "open"
+        );
+        setSelectedMonth(openMonth || monthsData[0]);
       }
     } catch {
       setToast({ message: "Failed to load data", type: "error" });
@@ -72,6 +130,23 @@ export default function SecurityDashboard() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Load reminders when selectedMonth changes
+  const loadReminders = useCallback(async () => {
+    if (!selectedMonth) return;
+    try {
+      const res = await fetch(`/api/reminders?monthId=${selectedMonth.id}`);
+      if (res.ok) {
+        setReminders(await res.json());
+      }
+    } catch {
+      // Silently fail for reminders
+    }
+  }, [selectedMonth]);
+
+  useEffect(() => {
+    loadReminders();
+  }, [loadReminders]);
 
   const handleConfirmCash = async (paymentId: number) => {
     setConfirmingId(paymentId);
@@ -86,7 +161,10 @@ export default function SecurityDashboard() {
         loadData();
       } else {
         const data = await res.json();
-        setToast({ message: data.error || "Failed to confirm", type: "error" });
+        setToast({
+          message: data.error || "Failed to confirm",
+          type: "error",
+        });
       }
     } catch {
       setToast({ message: "Network error", type: "error" });
@@ -94,6 +172,62 @@ export default function SecurityDashboard() {
       setConfirmingId(null);
     }
   };
+
+  const handleRemind = async (flatId: number) => {
+    if (!selectedMonth) return;
+    setRemindingFlatId(flatId);
+    try {
+      const res = await fetch("/api/reminders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ flatId, monthId: selectedMonth.id }),
+      });
+      if (res.ok) {
+        setToast({ message: "Reminder recorded!", type: "success" });
+        loadReminders();
+      } else {
+        const data = await res.json();
+        setToast({
+          message: data.error || "Failed to record reminder",
+          type: "error",
+        });
+      }
+    } catch {
+      setToast({ message: "Network error", type: "error" });
+    } finally {
+      setRemindingFlatId(null);
+    }
+  };
+
+  const handleFlatClick = async (flat: FlatStatusItem) => {
+    setModalFlat(flat);
+    setLoadingFlatHistory(true);
+    setFlatPayments([]);
+
+    try {
+      // Fetch all payments (not filtered by month) and filter client-side by flatId
+      const res = await fetch("/api/payments");
+      if (res.ok) {
+        const allPayments: PaymentData[] = await res.json();
+        const filtered = allPayments.filter((p) => p.flatId === flat.flatId);
+        setFlatPayments(filtered);
+      }
+    } catch {
+      setToast({
+        message: "Failed to load payment history",
+        type: "error",
+      });
+    } finally {
+      setLoadingFlatHistory(false);
+    }
+  };
+
+  const closeModal = () => {
+    setModalFlat(null);
+    setFlatPayments([]);
+  };
+
+  const isMonthClosed = selectedMonth?.status === "closed";
 
   if (loading) {
     return (
@@ -108,10 +242,11 @@ export default function SecurityDashboard() {
     (p) => selectedMonth && p.monthId === selectedMonth.id
   );
 
-  const gridData = allFlats.map((flat) => {
+  const gridData: FlatStatusItem[] = allFlats.map((flat) => {
     const payment = monthPayments.find((p) => p.flatId === flat.id);
     const isOverdue = selectedMonth
-      ? new Date().getDate() > selectedMonth.dueDateDay
+      ? selectedMonth.status === "open" &&
+        new Date().getDate() > selectedMonth.dueDateDay
       : false;
 
     return {
@@ -132,8 +267,40 @@ export default function SecurityDashboard() {
   );
 
   const paidCount = gridData.filter(
-    (f) => f.status === "paid" || f.status === "pending_collection" || f.status === "pending_verification"
+    (f) =>
+      f.status === "paid" ||
+      f.status === "pending_collection" ||
+      f.status === "pending_verification"
   ).length;
+
+  // Defaulters: flats with no payment or rejected/overdue/not_paid
+  const defaulters = gridData.filter(
+    (f) => f.status === "not_paid" || f.status === "overdue"
+  );
+
+  // Find the latest reminder for each flat
+  const getLastReminder = (flatId: number): ReminderData | undefined => {
+    return reminders.find((r) => r.flatId === flatId);
+  };
+
+  const formatReminderDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  const formatPaymentDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  };
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -144,22 +311,27 @@ export default function SecurityDashboard() {
           onClose={() => setToast(null)}
         />
       )}
-      <NavBar title="Security View" />
+      <NavBar title="Laurel Residency" subtitle="Security" />
 
       <main className="max-w-lg mx-auto p-4 space-y-4">
-        {/* Month Selector */}
-        {openMonths.length > 1 && (
+        {/* Month Selector - always visible, shows all months */}
+        {allMonths.length > 0 && (
           <div className="flex gap-2 overflow-x-auto pb-2">
-            {openMonths.map((m) => (
+            {allMonths.map((m) => (
               <button
                 key={m.id}
                 onClick={() => setSelectedMonth(m)}
                 className={`px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all
-                  ${selectedMonth?.id === m.id
-                    ? "bg-blue-600 text-white"
-                    : "bg-white text-slate-600 border border-slate-200"}`}
+                  ${
+                    selectedMonth?.id === m.id
+                      ? "bg-blue-600 text-white"
+                      : m.status === "closed"
+                        ? "bg-slate-200 text-slate-500"
+                        : "bg-white text-slate-600 border border-slate-200"
+                  }`}
               >
                 {MONTH_NAMES[m.month - 1]} {m.year}
+                {m.status === "closed" && " \u2713"}
               </button>
             ))}
           </div>
@@ -167,11 +339,23 @@ export default function SecurityDashboard() {
 
         {selectedMonth ? (
           <>
+            {/* Closed Month Banner */}
+            {isMonthClosed && (
+              <div className="bg-slate-100 border border-slate-300 rounded-xl px-4 py-3 text-sm text-slate-600 text-center">
+                This month is closed. Viewing in read-only mode.
+              </div>
+            )}
+
             {/* Summary */}
             <Card>
               <div className="flex justify-between items-center mb-3">
                 <h2 className="text-lg font-bold text-slate-800">
                   {MONTH_NAMES[selectedMonth.month - 1]} {selectedMonth.year}
+                  {isMonthClosed && (
+                    <span className="ml-2 text-sm text-green-600 font-normal">
+                      (Closed)
+                    </span>
+                  )}
                 </h2>
                 <span className="text-sm text-slate-500">
                   {paidCount}/{allFlats.length} paid
@@ -180,16 +364,18 @@ export default function SecurityDashboard() {
               <div className="w-full bg-slate-200 rounded-full h-3 mb-1">
                 <div
                   className="bg-green-500 h-3 rounded-full transition-all"
-                  style={{ width: `${(paidCount / allFlats.length) * 100}%` }}
+                  style={{
+                    width: `${allFlats.length > 0 ? (paidCount / allFlats.length) * 100 : 0}%`,
+                  }}
                 />
               </div>
             </Card>
 
             {/* Flat Grid */}
-            <FlatGrid flats={gridData} />
+            <FlatGrid flats={gridData} onFlatClick={handleFlatClick} />
 
-            {/* Pending Security Confirmations */}
-            {pendingSecurityPayments.length > 0 && (
+            {/* Pending Security Confirmations - only for open months */}
+            {!isMonthClosed && pendingSecurityPayments.length > 0 && (
               <div>
                 <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-2 px-1">
                   Confirm Cash Receipts
@@ -203,7 +389,8 @@ export default function SecurityDashboard() {
                             Flat {p.flatNumber}
                           </div>
                           <div className="text-sm text-slate-500">
-                            ₹{p.amount.toLocaleString("en-IN")} — {PAYMENT_MODE_LABELS[p.paymentMode]}
+                            ₹{p.amount.toLocaleString("en-IN")} —{" "}
+                            {PAYMENT_MODE_LABELS[p.paymentMode]}
                           </div>
                         </div>
                         <Button
@@ -211,6 +398,7 @@ export default function SecurityDashboard() {
                           size="sm"
                           loading={confirmingId === p.id}
                           onClick={() => handleConfirmCash(p.id)}
+                          className="!w-auto"
                         >
                           Confirm
                         </Button>
@@ -220,15 +408,153 @@ export default function SecurityDashboard() {
                 </div>
               </div>
             )}
+
+            {/* Defaulters Section */}
+            {defaulters.length > 0 && (
+              <div>
+                <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-2 px-1">
+                  Defaulters ({defaulters.length})
+                </h3>
+                <div className="space-y-2">
+                  {defaulters.map((flat) => {
+                    const lastReminder = getLastReminder(flat.flatId);
+                    return (
+                      <Card key={flat.flatId}>
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <div className="font-bold text-slate-800">
+                              Flat {flat.flatNumber}
+                            </div>
+                            <div className="text-sm text-slate-500">
+                              ₹{flat.amount.toLocaleString("en-IN")} —{" "}
+                              {flat.status === "overdue"
+                                ? "Overdue"
+                                : "Not Paid"}
+                            </div>
+                            {lastReminder && (
+                              <div className="text-xs text-blue-600 mt-1">
+                                Last reminded:{" "}
+                                {formatReminderDate(lastReminder.sentAt)}
+                              </div>
+                            )}
+                          </div>
+                          {!isMonthClosed && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              loading={remindingFlatId === flat.flatId}
+                              onClick={() => handleRemind(flat.flatId)}
+                              className="!w-auto"
+                            >
+                              Reminded
+                            </Button>
+                          )}
+                        </div>
+                      </Card>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </>
         ) : (
           <Card>
             <p className="text-slate-500 text-center py-4">
-              No open months to display.
+              No months to display.
             </p>
           </Card>
         )}
       </main>
+
+      {/* Flat Payment History Modal */}
+      {modalFlat && (
+        <div
+          className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center"
+          onClick={closeModal}
+        >
+          <div
+            className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-lg max-h-[80vh] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
+              <h3 className="text-lg font-bold text-slate-800">
+                Flat {modalFlat.flatNumber}
+              </h3>
+              <button
+                onClick={closeModal}
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <svg
+                  className="w-5 h-5 text-slate-500"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 overflow-y-auto max-h-[65vh]">
+              {loadingFlatHistory ? (
+                <div className="flex justify-center py-8">
+                  <div className="animate-spin h-6 w-6 border-4 border-blue-600 border-t-transparent rounded-full" />
+                </div>
+              ) : flatPayments.length === 0 ? (
+                <p className="text-slate-500 text-center py-8">
+                  No payment history found.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {flatPayments.map((p) => (
+                    <div
+                      key={p.id}
+                      className="border border-slate-200 rounded-xl p-3"
+                    >
+                      <div className="flex justify-between items-start mb-1">
+                        <span className="font-semibold text-slate-800">
+                          {p.month && p.year
+                            ? `${MONTH_NAMES[p.month - 1]} ${p.year}`
+                            : `Month ID: ${p.monthId}`}
+                        </span>
+                        <span
+                          className={`text-xs font-medium px-2 py-1 rounded-full ${
+                            p.status === "paid"
+                              ? "bg-green-100 text-green-700"
+                              : p.status === "rejected"
+                                ? "bg-red-100 text-red-700"
+                                : p.status === "pending_collection"
+                                  ? "bg-orange-100 text-orange-700"
+                                  : "bg-yellow-100 text-yellow-700"
+                          }`}
+                        >
+                          {STATUS_LABELS[p.status] || p.status}
+                        </span>
+                      </div>
+                      <div className="text-sm text-slate-600">
+                        ₹{p.amount.toLocaleString("en-IN")} via{" "}
+                        {PAYMENT_MODE_LABELS[p.paymentMode]}
+                      </div>
+                      {p.submittedAt && (
+                        <div className="text-xs text-slate-400 mt-1">
+                          Submitted: {formatPaymentDate(p.submittedAt)}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -62,6 +62,10 @@ export async function GET(request: Request) {
 
     const defaulterFlats = allFlats.filter((f) => !paidFlatIds.includes(f.id));
 
+    // Get webapp URL
+    const webappUrlRow = await db.select().from(config).where(eq(config.key, "webapp_url")).limit(1);
+    const webappUrl = webappUrlRow[0]?.value || null;
+
     // Check for idempotency
     const notifKey = `notif_${currentYear}_${currentMonth}_${dayOfMonth}`;
     const alreadySent = await db
@@ -75,6 +79,16 @@ export async function GET(request: Request) {
     }
 
     let sent = false;
+
+    // 1st: notify admin about new month
+    if (dayOfMonth === 1) {
+      let msg = `<b>New Month: ${monthLabel}</b>\n\nMaintenance collection period has started. ${allFlats.length} flats to collect from.`;
+      if (webappUrl) {
+        msg += `\n\nDashboard: ${webappUrl}`;
+      }
+      await notifyAdmin(msg);
+      sent = true;
+    }
 
     // 11th: notify security
     if (dayOfMonth === 11 && defaulterFlats.length > 0) {
@@ -102,7 +116,8 @@ export async function GET(request: Request) {
         const reminder = formatWhatsAppReminder(
           flat.flatNumber,
           flat.maintenanceAmount,
-          monthLabel
+          monthLabel,
+          webappUrl || undefined
         );
         let phoneInfo = "";
         if (flat.phoneEncrypted && flat.phoneIv && flat.phoneTag) {

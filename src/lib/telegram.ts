@@ -85,7 +85,13 @@ export function formatCollectionSummary(
 export function formatWhatsAppReminder(
   flatNumber: string,
   amount: number,
-  monthLabel: string
+  monthLabel: string,
+  webappUrl?: string
 ): string {
-  return `Hi, this is a reminder that Flat ${flatNumber}'s maintenance of ₹${amount.toLocaleString("en-IN")} for ${monthLabel} is overdue. Please pay at the earliest. Thank you.`;
+  let msg = `Hi, this is a reminder that Flat ${flatNumber}'s maintenance of ₹${amount.toLocaleString("en-IN")} for ${monthLabel} is overdue. Please pay at the earliest.`;
+  if (webappUrl) {
+    msg += `\n\nPay online: ${webappUrl}`;
+  }
+  msg += "\n\nThank you.";
+  return msg;
 }

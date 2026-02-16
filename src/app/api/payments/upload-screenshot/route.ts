@@ -4,7 +4,7 @@ import { payments } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getSession } from "@/lib/auth";
 import { encrypt } from "@/lib/crypto";
-import { put } from "@vercel/blob";
+import { putBlob } from "@/lib/blob";
 
 export async function POST(request: Request) {
   const session = await getSession();
@@ -56,14 +56,10 @@ export async function POST(request: Request) {
     // Encrypt the screenshot
     const { encrypted, iv, tag } = encrypt(buffer);
 
-    // Upload encrypted file to Vercel Blob
-    const blob = await put(
+    // Upload encrypted file
+    const blob = await putBlob(
       `screenshots/${paymentId}-${Date.now()}.enc`,
-      encrypted,
-      {
-        access: "public",
-        contentType: "application/octet-stream",
-      }
+      encrypted
     );
 
     // Update payment with screenshot info

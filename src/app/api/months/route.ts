@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { months } from "@/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { desc } from "drizzle-orm";
 import { getSession } from "@/lib/auth";
 import { openMonthSchema } from "@/lib/validators";
 
@@ -12,20 +12,11 @@ export async function GET() {
   }
 
   try {
-    let result;
-    if (session.role === "security") {
-      // Security only sees open months
-      result = await db
-        .select()
-        .from(months)
-        .where(eq(months.status, "open"))
-        .orderBy(desc(months.year), desc(months.month));
-    } else {
-      result = await db
-        .select()
-        .from(months)
-        .orderBy(desc(months.year), desc(months.month));
-    }
+    // All roles can see all months (security browses in read-only for closed ones)
+    const result = await db
+      .select()
+      .from(months)
+      .orderBy(desc(months.year), desc(months.month));
 
     return NextResponse.json(result);
   } catch (error) {

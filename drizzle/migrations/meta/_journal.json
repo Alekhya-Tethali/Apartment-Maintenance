@@ -15,6 +15,13 @@
       "when": 1771249324450,
       "tag": "0001_orange_firestar",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1771252304695,
+      "tag": "0002_greedy_owl",
+      "breakpoints": true
     }
   ]
 }

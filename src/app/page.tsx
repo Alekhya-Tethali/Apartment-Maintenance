@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Button from "@/components/ui/Button";
 import PinInput from "@/components/ui/PinInput";
@@ -17,28 +17,39 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [flats] = useState([
-    "G1", "G2", "F1", "F2", "S1", "S2",
-    "T1", "T2", "FO1", "FO2", "FI1", "FI2",
+    "101", "102", "103",
+    "201", "202", "203",
+    "301", "302", "303",
+    "401", "402", "403",
   ]);
 
-  const handleLogin = async () => {
+  // Use ref so the auto-login callback always has fresh values
+  const stateRef = useRef({ mode, flatNumber, loading });
+  useEffect(() => {
+    stateRef.current = { mode, flatNumber, loading };
+  }, [mode, flatNumber, loading]);
+
+  const doLogin = useCallback(async (pinOrPassword: string) => {
+    const { mode: currentMode, flatNumber: currentFlat, loading: isLoading } = stateRef.current;
+    if (isLoading) return;
+
     setLoading(true);
     setError("");
 
     try {
-      const body: Record<string, string> = { role: mode };
-      if (mode === "resident") {
-        if (!flatNumber) {
-          setError("Please select your flat");
+      const body: Record<string, string> = { role: currentMode };
+      if (currentMode === "resident") {
+        if (!currentFlat) {
+          setError("Please select your flat first");
           setLoading(false);
           return;
         }
-        body.flatNumber = flatNumber;
-        body.pin = pin;
-      } else if (mode === "security") {
-        body.pin = pin;
+        body.flatNumber = currentFlat;
+        body.pin = pinOrPassword;
+      } else if (currentMode === "security") {
+        body.pin = pinOrPassword;
       } else {
-        body.password = password;
+        body.password = pinOrPassword;
       }
 
       const res = await fetch("/api/auth/login", {
@@ -55,15 +66,19 @@ export default function LoginPage() {
         return;
       }
 
-      // Redirect based on role
-      if (mode === "resident") router.push("/resident");
-      else if (mode === "security") router.push("/security");
+      if (currentMode === "resident") router.push("/resident");
+      else if (currentMode === "security") router.push("/security");
       else router.push("/admin");
     } catch {
       setError("Network error. Please try again.");
       setLoading(false);
     }
-  };
+  }, [router]);
+
+  const handlePinComplete = useCallback((completedPin: string) => {
+    setPin(completedPin);
+    doLogin(completedPin);
+  }, [doLogin]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-600 to-blue-800 flex items-center justify-center p-4">
@@ -79,9 +94,9 @@ export default function LoginPage() {
             </svg>
           </div>
           <h1 className="text-xl font-bold text-slate-800">
-            Apartment Maintenance
+            Laurel Residency
           </h1>
-          <p className="text-slate-500 text-sm mt-1">Track your payments</p>
+          <p className="text-slate-500 text-sm mt-1">Maintenance Tracker</p>
         </div>
 
         {/* Role Tabs */}
@@ -105,7 +120,7 @@ export default function LoginPage() {
               <label className="block text-sm font-medium text-slate-700 mb-2">
                 Select Your Flat
               </label>
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 {flats.map((f) => (
                   <button
                     key={f}
@@ -124,11 +139,13 @@ export default function LoginPage() {
               <label className="block text-sm font-medium text-slate-700 mb-2 text-center">
                 Enter PIN
               </label>
-              <PinInput onComplete={setPin} disabled={loading} />
+              <PinInput onComplete={handlePinComplete} disabled={loading} />
             </div>
-            <Button onClick={handleLogin} loading={loading} size="lg">
-              Login
-            </Button>
+            {loading && (
+              <div className="text-center text-sm text-blue-600 font-medium">
+                Logging in...
+              </div>
+            )}
           </div>
         )}
 
@@ -139,11 +156,13 @@ export default function LoginPage() {
               <label className="block text-sm font-medium text-slate-700 mb-2 text-center">
                 Enter Security PIN
               </label>
-              <PinInput onComplete={setPin} disabled={loading} />
+              <PinInput onComplete={handlePinComplete} disabled={loading} />
             </div>
-            <Button onClick={handleLogin} loading={loading} size="lg">
-              Login as Security
-            </Button>
+            {loading && (
+              <div className="text-center text-sm text-blue-600 font-medium">
+                Logging in...
+              </div>
+            )}
           </div>
         )}
 
@@ -158,7 +177,7 @@ export default function LoginPage() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+                onKeyDown={(e) => e.key === "Enter" && doLogin(password)}
                 placeholder="Enter password"
                 disabled={loading}
                 className="w-full px-4 py-3 border-2 border-slate-300 rounded-xl text-lg
@@ -166,7 +185,7 @@ export default function LoginPage() {
                   disabled:bg-slate-100"
               />
             </div>
-            <Button onClick={handleLogin} loading={loading} size="lg">
+            <Button onClick={() => doLogin(password)} loading={loading} size="lg">
               Login as Admin
             </Button>
           </div>

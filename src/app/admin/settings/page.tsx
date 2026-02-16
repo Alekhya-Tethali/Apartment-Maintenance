@@ -6,6 +6,8 @@ import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Toast from "@/components/ui/Toast";
 
+type SettingsTab = "flats" | "app";
+
 interface FlatData {
   id: number;
   flatNumber: string;
@@ -15,6 +17,7 @@ interface FlatData {
 }
 
 export default function AdminSettings() {
+  const [tab, setTab] = useState<SettingsTab>("flats");
   const [flats, setFlats] = useState<FlatData[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -33,6 +36,7 @@ export default function AdminSettings() {
   const [telegramAdminChat, setTelegramAdminChat] = useState("");
   const [telegramSecurityChat, setTelegramSecurityChat] = useState("");
   const [adminWhatsapp, setAdminWhatsapp] = useState("");
+  const [webappUrl, setWebappUrl] = useState("");
 
   const loadData = useCallback(async () => {
     try {
@@ -95,6 +99,7 @@ export default function AdminSettings() {
     if (telegramAdminChat) updates.telegramAdminChatId = telegramAdminChat;
     if (telegramSecurityChat) updates.telegramSecurityChatId = telegramSecurityChat;
     if (adminWhatsapp) updates.adminWhatsappNumber = adminWhatsapp;
+    if (webappUrl) updates.webappUrl = webappUrl;
 
     if (Object.keys(updates).length === 0) {
       setToast({ message: "Nothing to save", type: "error" });
@@ -116,6 +121,7 @@ export default function AdminSettings() {
         setTelegramAdminChat("");
         setTelegramSecurityChat("");
         setAdminWhatsapp("");
+        setWebappUrl("");
       } else {
         const data = await res.json();
         setToast({ message: data.error, type: "error" });
@@ -143,141 +149,167 @@ export default function AdminSettings() {
       <NavBar title="Settings" backHref="/admin" />
 
       <main className="max-w-lg mx-auto p-4 space-y-4">
-        {/* Flat Configuration */}
-        <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider px-1">
-          Flat Configuration
-        </h3>
-        <div className="space-y-2">
-          {flats.map((flat) => (
-            <Card key={flat.id}>
-              {editingFlat === flat.id ? (
-                <div className="space-y-3">
-                  <div className="font-bold text-slate-800">Flat {flat.flatNumber}</div>
-                  <div>
-                    <label className="text-xs text-slate-500">Amount (₹)</label>
-                    <input
-                      type="number"
-                      value={editAmount}
-                      onChange={(e) => setEditAmount(e.target.value)}
-                      className="w-full mt-1 px-3 py-2 border rounded-lg text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-slate-500">New PIN (4 digits, leave empty to keep)</label>
-                    <input
-                      type="text"
-                      maxLength={4}
-                      value={editPin}
-                      onChange={(e) => setEditPin(e.target.value.replace(/\D/g, ""))}
-                      className="w-full mt-1 px-3 py-2 border rounded-lg text-sm"
-                      placeholder="••••"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-slate-500">Phone (with country code, e.g., 919876543210)</label>
-                    <input
-                      type="tel"
-                      value={editPhone}
-                      onChange={(e) => setEditPhone(e.target.value)}
-                      className="w-full mt-1 px-3 py-2 border rounded-lg text-sm"
-                      placeholder="919876543210"
-                    />
-                  </div>
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="sm" onClick={() => setEditingFlat(null)}>
-                      Cancel
-                    </Button>
-                    <Button variant="success" size="sm" loading={saving} onClick={handleSaveFlat}>
-                      Save
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex justify-between items-center">
-                  <div>
-                    <div className="font-bold text-slate-800">Flat {flat.flatNumber}</div>
-                    <div className="text-sm text-slate-500">
-                      ₹{flat.maintenanceAmount.toLocaleString("en-IN")}
-                      {flat.hasPhone ? " — Phone set" : ""}
-                    </div>
-                  </div>
-                  <Button variant="outline" size="sm" onClick={() => startEditing(flat)}>
-                    Edit
-                  </Button>
-                </div>
-              )}
-            </Card>
+        {/* Sub-tabs */}
+        <div className="flex rounded-xl bg-slate-100 p-1">
+          {([
+            { key: "flats", label: "Flats" },
+            { key: "app", label: "App Settings" },
+          ] as const).map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all
+                ${tab === t.key ? "bg-white text-blue-600 shadow-sm" : "text-slate-500"}`}
+            >
+              {t.label}
+            </button>
           ))}
         </div>
 
-        {/* App Settings */}
-        <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider px-1 pt-4">
-          App Settings
-        </h3>
-        <Card className="space-y-3">
-          <div>
-            <label className="text-xs text-slate-500">New Admin Password</label>
-            <input
-              type="password"
-              value={adminPassword}
-              onChange={(e) => setAdminPassword(e.target.value)}
-              className="w-full mt-1 px-3 py-2 border rounded-lg text-sm"
-              placeholder="Leave empty to keep current"
-            />
+        {/* Flats Tab */}
+        {tab === "flats" && (
+          <div className="space-y-2">
+            {flats.map((flat) => (
+              <Card key={flat.id}>
+                {editingFlat === flat.id ? (
+                  <div className="space-y-3">
+                    <div className="font-bold text-slate-800">Flat {flat.flatNumber}</div>
+                    <div>
+                      <label className="text-xs text-slate-500">Amount (₹)</label>
+                      <input
+                        type="number"
+                        value={editAmount}
+                        onChange={(e) => setEditAmount(e.target.value)}
+                        className="w-full mt-1 px-3 py-2 border rounded-lg text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-slate-500">New PIN (4 digits, leave empty to keep)</label>
+                      <input
+                        type="text"
+                        maxLength={4}
+                        value={editPin}
+                        onChange={(e) => setEditPin(e.target.value.replace(/\D/g, ""))}
+                        className="w-full mt-1 px-3 py-2 border rounded-lg text-sm"
+                        placeholder="••••"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-slate-500">Phone (with country code, e.g., 919876543210)</label>
+                      <input
+                        type="tel"
+                        value={editPhone}
+                        onChange={(e) => setEditPhone(e.target.value)}
+                        className="w-full mt-1 px-3 py-2 border rounded-lg text-sm"
+                        placeholder="919876543210"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={() => setEditingFlat(null)}>
+                        Cancel
+                      </Button>
+                      <Button variant="success" size="sm" loading={saving} onClick={handleSaveFlat}>
+                        Save
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <div className="font-bold text-slate-800">Flat {flat.flatNumber}</div>
+                      <div className="text-sm text-slate-500">
+                        ₹{flat.maintenanceAmount.toLocaleString("en-IN")}
+                        {flat.hasPhone ? " — Phone set" : ""}
+                      </div>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={() => startEditing(flat)}>
+                      Edit
+                    </Button>
+                  </div>
+                )}
+              </Card>
+            ))}
           </div>
-          <div>
-            <label className="text-xs text-slate-500">New Security PIN</label>
-            <input
-              type="text"
-              maxLength={4}
-              value={securityPin}
-              onChange={(e) => setSecurityPin(e.target.value.replace(/\D/g, ""))}
-              className="w-full mt-1 px-3 py-2 border rounded-lg text-sm"
-              placeholder="4 digits"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-slate-500">Telegram Bot Token</label>
-            <input
-              type="text"
-              value={telegramToken}
-              onChange={(e) => setTelegramToken(e.target.value)}
-              className="w-full mt-1 px-3 py-2 border rounded-lg text-sm"
-              placeholder="From @BotFather"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-slate-500">Telegram Admin Chat ID</label>
-            <input
-              type="text"
-              value={telegramAdminChat}
-              onChange={(e) => setTelegramAdminChat(e.target.value)}
-              className="w-full mt-1 px-3 py-2 border rounded-lg text-sm"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-slate-500">Telegram Security Chat ID</label>
-            <input
-              type="text"
-              value={telegramSecurityChat}
-              onChange={(e) => setTelegramSecurityChat(e.target.value)}
-              className="w-full mt-1 px-3 py-2 border rounded-lg text-sm"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-slate-500">Admin WhatsApp Number</label>
-            <input
-              type="tel"
-              value={adminWhatsapp}
-              onChange={(e) => setAdminWhatsapp(e.target.value)}
-              className="w-full mt-1 px-3 py-2 border rounded-lg text-sm"
-              placeholder="919876543210"
-            />
-          </div>
-          <Button onClick={handleSaveConfig} loading={saving} variant="primary">
-            Save Settings
-          </Button>
-        </Card>
+        )}
+
+        {/* App Settings Tab */}
+        {tab === "app" && (
+          <Card className="space-y-3">
+            <div>
+              <label className="text-xs text-slate-500">New Admin Password</label>
+              <input
+                type="password"
+                value={adminPassword}
+                onChange={(e) => setAdminPassword(e.target.value)}
+                className="w-full mt-1 px-3 py-2 border rounded-lg text-sm"
+                placeholder="Leave empty to keep current"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500">New Security PIN</label>
+              <input
+                type="text"
+                maxLength={4}
+                value={securityPin}
+                onChange={(e) => setSecurityPin(e.target.value.replace(/\D/g, ""))}
+                className="w-full mt-1 px-3 py-2 border rounded-lg text-sm"
+                placeholder="4 digits"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500">Telegram Bot Token</label>
+              <input
+                type="text"
+                value={telegramToken}
+                onChange={(e) => setTelegramToken(e.target.value)}
+                className="w-full mt-1 px-3 py-2 border rounded-lg text-sm"
+                placeholder="From @BotFather"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500">Telegram Admin Chat ID</label>
+              <input
+                type="text"
+                value={telegramAdminChat}
+                onChange={(e) => setTelegramAdminChat(e.target.value)}
+                className="w-full mt-1 px-3 py-2 border rounded-lg text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500">Telegram Security Chat ID</label>
+              <input
+                type="text"
+                value={telegramSecurityChat}
+                onChange={(e) => setTelegramSecurityChat(e.target.value)}
+                className="w-full mt-1 px-3 py-2 border rounded-lg text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500">Admin WhatsApp Number</label>
+              <input
+                type="tel"
+                value={adminWhatsapp}
+                onChange={(e) => setAdminWhatsapp(e.target.value)}
+                className="w-full mt-1 px-3 py-2 border rounded-lg text-sm"
+                placeholder="919876543210"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500">Webapp URL</label>
+              <input
+                type="url"
+                value={webappUrl}
+                onChange={(e) => setWebappUrl(e.target.value)}
+                className="w-full mt-1 px-3 py-2 border rounded-lg text-sm"
+                placeholder="https://your-app.vercel.app"
+              />
+              <p className="text-xs text-slate-400 mt-1">Included in reminder messages to residents</p>
+            </div>
+            <Button onClick={handleSaveConfig} loading={saving} variant="primary">
+              Save Settings
+            </Button>
+          </Card>
+        )}
       </main>
     </div>
   );

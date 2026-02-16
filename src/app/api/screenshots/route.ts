@@ -4,6 +4,7 @@ import { payments } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { getSession } from "@/lib/auth";
 import { decrypt } from "@/lib/crypto";
+import { getBlob } from "@/lib/blob";
 
 export async function GET(request: Request) {
   const session = await getSession();
@@ -29,13 +30,8 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Screenshot not found" }, { status: 404 });
     }
 
-    // Fetch encrypted screenshot from Vercel Blob
-    const response = await fetch(payment[0].screenshotBlobUrl);
-    if (!response.ok) {
-      return NextResponse.json({ error: "Failed to fetch screenshot" }, { status: 500 });
-    }
-
-    const encryptedBuffer = Buffer.from(await response.arrayBuffer());
+    // Fetch encrypted screenshot
+    const encryptedBuffer = await getBlob(payment[0].screenshotBlobUrl);
 
     // Decrypt
     const decrypted = decrypt(

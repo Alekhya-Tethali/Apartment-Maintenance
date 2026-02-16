@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, useCallback, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import NavBar from "@/components/NavBar";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import FlatGrid from "@/components/FlatGrid";
 import Toast from "@/components/ui/Toast";
-import { type PaymentStatus, type PaymentMode } from "@/lib/constants";
+import { type PaymentStatus, type PaymentMode, PAYMENT_MODE_LABELS, STATUS_LABELS } from "@/lib/constants";
 
 interface FlatData {
   id: number;
@@ -31,18 +31,58 @@ interface PaymentData {
   amount: number;
   paymentMode: PaymentMode;
   status: PaymentStatus;
+  submittedAt: string;
+  month?: number;
+  year?: number;
+  paymentDate?: string;
 }
+
+interface FlatStatusItem {
+  flatNumber: string;
+  flatId: number;
+  amount: number;
+  status: PaymentStatus | "not_paid" | "overdue";
+  paymentId?: number;
+}
+
+const formatPaymentDate = (dateStr: string) => {
+  return new Date(dateStr).toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+};
 
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-export default function AdminDashboard() {
+export default function AdminDashboardPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full" />
+      </div>
+    }>
+      <AdminDashboard />
+    </Suspense>
+  );
+}
+
+function AdminDashboard() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const urlMonthId = searchParams.get("monthId");
+
   const [allFlats, setAllFlats] = useState<FlatData[]>([]);
   const [allMonths, setAllMonths] = useState<MonthData[]>([]);
   const [payments, setPayments] = useState<PaymentData[]>([]);
   const [selectedMonth, setSelectedMonth] = useState<MonthData | null>(null);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+
+  // Flat history modal
+  const [modalFlat, setModalFlat] = useState<FlatStatusItem | null>(null);
+  const [flatPayments, setFlatPayments] = useState<PaymentData[]>([]);
+  const [loadingFlatHistory, setLoadingFlatHistory] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -57,6 +97,14 @@ export default function AdminDashboard() {
       setPayments(await paymentsRes.json());
 
       if (!selectedMonth && monthsData.length > 0) {
+        // If URL has monthId, use that; otherwise default to open month
+        if (urlMonthId) {
+          const urlMonth = monthsData.find((m: MonthData) => m.id === parseInt(urlMonthId));
+          if (urlMonth) {
+            setSelectedMonth(urlMonth);
+            return;
+          }
+        }
         const openMonth = monthsData.find((m: MonthData) => m.status === "open");
         setSelectedMonth(openMonth || monthsData[0]);
       }
@@ -65,11 +113,33 @@ export default function AdminDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [selectedMonth]);
+  }, [selectedMonth, urlMonthId]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  const handleFlatClick = async (flat: FlatStatusItem) => {
+    setModalFlat(flat);
+    setLoadingFlatHistory(true);
+    setFlatPayments([]);
+    try {
+      const res = await fetch("/api/payments");
+      if (res.ok) {
+        const allPayments: PaymentData[] = await res.json();
+        setFlatPayments(allPayments.filter((p) => p.flatId === flat.flatId));
+      }
+    } catch {
+      setToast({ message: "Failed to load payment history", type: "error" });
+    } finally {
+      setLoadingFlatHistory(false);
+    }
+  };
+
+  const closeModal = () => {
+    setModalFlat(null);
+    setFlatPayments([]);
+  };
 
   if (loading) {
     return (
@@ -83,7 +153,7 @@ export default function AdminDashboard() {
     (p) => selectedMonth && p.monthId === selectedMonth.id
   );
 
-  const gridData = allFlats.map((flat) => {
+  const gridData: FlatStatusItem[] = allFlats.map((flat) => {
     const payment = monthPayments.find((p) => p.flatId === flat.id);
     const isOverdue = selectedMonth
       ? selectedMonth.status === "open" && new Date().getDate() > selectedMonth.dueDateDay
@@ -116,7 +186,7 @@ export default function AdminDashboard() {
       {toast && (
         <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
       )}
-      <NavBar title="Admin Dashboard" />
+      <NavBar title="Laurel Residency" subtitle="Admin" />
 
       <main className="max-w-lg mx-auto p-4 space-y-4">
         {/* Month Selector */}
@@ -173,7 +243,7 @@ export default function AdminDashboard() {
             </Card>
 
             {/* Flat Grid */}
-            <FlatGrid flats={gridData} />
+            <FlatGrid flats={gridData} onFlatClick={handleFlatClick} />
 
             {/* Action Buttons */}
             <div className="space-y-2">
@@ -222,6 +292,96 @@ export default function AdminDashboard() {
           </>
         )}
       </main>
+
+      {/* Flat Payment History Modal */}
+      {modalFlat && (
+        <div
+          className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center"
+          onClick={closeModal}
+        >
+          <div
+            className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-lg max-h-[80vh] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
+              <h3 className="text-lg font-bold text-slate-800">
+                Flat {modalFlat.flatNumber}
+              </h3>
+              <button
+                onClick={closeModal}
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <svg
+                  className="w-5 h-5 text-slate-500"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 overflow-y-auto max-h-[65vh]">
+              {loadingFlatHistory ? (
+                <div className="flex justify-center py-8">
+                  <div className="animate-spin h-6 w-6 border-4 border-blue-600 border-t-transparent rounded-full" />
+                </div>
+              ) : flatPayments.length === 0 ? (
+                <p className="text-slate-500 text-center py-8">
+                  No payment history found.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {flatPayments.map((p) => (
+                    <div
+                      key={p.id}
+                      className="border border-slate-200 rounded-xl p-3"
+                    >
+                      <div className="flex justify-between items-start mb-1">
+                        <span className="font-semibold text-slate-800">
+                          {p.month && p.year
+                            ? `${MONTH_NAMES[p.month - 1]} ${p.year}`
+                            : `Month ID: ${p.monthId}`}
+                        </span>
+                        <span
+                          className={`text-xs font-medium px-2 py-1 rounded-full ${
+                            p.status === "paid"
+                              ? "bg-green-100 text-green-700"
+                              : p.status === "rejected"
+                                ? "bg-red-100 text-red-700"
+                                : p.status === "pending_collection"
+                                  ? "bg-orange-100 text-orange-700"
+                                  : "bg-yellow-100 text-yellow-700"
+                          }`}
+                        >
+                          {STATUS_LABELS[p.status] || p.status}
+                        </span>
+                      </div>
+                      <div className="text-sm text-slate-600">
+                        ₹{p.amount.toLocaleString("en-IN")} via{" "}
+                        {PAYMENT_MODE_LABELS[p.paymentMode]}
+                      </div>
+                      {p.submittedAt && (
+                        <div className="text-xs text-slate-400 mt-1">
+                          Submitted: {formatPaymentDate(p.submittedAt)}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

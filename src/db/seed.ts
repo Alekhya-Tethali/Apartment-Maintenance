@@ -15,14 +15,12 @@ async function seed() {
   // Default PIN: 0000 for all flats
   const defaultPinHash = await bcrypt.hash("0000", 12);
 
-  // Create 12 flats
+  // Create 12 flats (4 floors × 3 flats)
   const flatNumbers = [
-    "G1", "G2",
-    "F1", "F2",
-    "S1", "S2",
-    "T1", "T2",
-    "FO1", "FO2",
-    "FI1", "FI2",
+    "101", "102", "103",
+    "201", "202", "203",
+    "301", "302", "303",
+    "401", "402", "403",
   ];
 
   for (const flatNumber of flatNumbers) {

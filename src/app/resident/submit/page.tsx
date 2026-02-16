@@ -25,9 +25,12 @@ function SubmitPayment() {
   const monthId = searchParams.get("monthId");
 
   const [paymentMode, setPaymentMode] = useState<string>("");
+  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split("T")[0]);
+  const [skipScreenshot, setSkipScreenshot] = useState(false);
   const [screenshot, setScreenshot] = useState<File | null>(null);
   const [preview, setPreview] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -42,9 +45,9 @@ function SubmitPayment() {
   };
 
   const handleSubmit = async () => {
-    if (!paymentMode || !monthId) return;
+    if (!paymentMode || !monthId || submitting || submitted) return;
 
-    if (paymentMode !== "cash" && !screenshot) {
+    if (paymentMode !== "cash" && !screenshot && !skipScreenshot) {
       setToast({ message: "Please upload a payment screenshot", type: "error" });
       return;
     }
@@ -59,6 +62,7 @@ function SubmitPayment() {
         body: JSON.stringify({
           monthId: parseInt(monthId),
           paymentMode,
+          paymentDate,
         }),
       });
 
@@ -81,14 +85,19 @@ function SubmitPayment() {
         });
 
         if (!uploadRes.ok) {
-          setToast({ message: "Payment created but screenshot upload failed. Contact admin.", type: "error" });
-          setSubmitting(false);
+          // Payment was created but screenshot failed
+          // Redirect to dashboard which will show retry option
+          setToast({ message: "Screenshot upload failed. You can retry from the dashboard.", type: "error" });
+          setTimeout(() => router.replace("/resident"), 2000);
           return;
         }
       }
 
-      setToast({ message: "Payment submitted successfully!", type: "success" });
-      setTimeout(() => router.push("/resident"), 1500);
+      // Mark as submitted to prevent double-clicks
+      setSubmitted(true);
+      setToast({ message: "Payment submitted!", type: "success" });
+      // Redirect to dashboard immediately
+      router.replace("/resident");
     } catch {
       setToast({ message: "Network error. Please try again.", type: "error" });
       setSubmitting(false);
@@ -120,10 +129,12 @@ function SubmitPayment() {
               <button
                 key={mode.value}
                 onClick={() => setPaymentMode(mode.value)}
+                disabled={submitting || submitted}
                 className={`w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-all text-left
                   ${paymentMode === mode.value
                     ? "border-blue-500 bg-blue-50 shadow-sm"
-                    : `${mode.color} hover:shadow-sm`}`}
+                    : `${mode.color} hover:shadow-sm`}
+                  ${(submitting || submitted) ? "opacity-50 cursor-not-allowed" : ""}`}
               >
                 <span className="text-2xl">{mode.icon}</span>
                 <span className="text-lg font-medium text-slate-800">
@@ -137,15 +148,51 @@ function SubmitPayment() {
           </div>
         </Card>
 
-        {/* Screenshot Upload (for digital payments) */}
+        {/* Payment Date */}
+        {paymentMode && (
+          <Card>
+            <h2 className="text-lg font-bold text-slate-800 mb-3">Payment Date</h2>
+            <input
+              type="date"
+              value={paymentDate}
+              onChange={(e) => setPaymentDate(e.target.value)}
+              disabled={submitting || submitted}
+              max={new Date().toISOString().split("T")[0]}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <p className="text-xs text-slate-400 mt-1">When was the payment actually made?</p>
+          </Card>
+        )}
+
+        {/* Submit without screenshot option */}
         {paymentMode && paymentMode !== "cash" && (
+          <Card>
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={skipScreenshot}
+                onChange={(e) => setSkipScreenshot(e.target.checked)}
+                disabled={submitting || submitted}
+                className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+              />
+              <div>
+                <div className="text-sm font-medium text-slate-800">Submit without screenshot</div>
+                <div className="text-xs text-slate-500">You can upload it later from the dashboard</div>
+              </div>
+            </label>
+          </Card>
+        )}
+
+        {/* Screenshot Upload (for digital payments) */}
+        {paymentMode && paymentMode !== "cash" && !skipScreenshot && (
           <Card>
             <h2 className="text-lg font-bold text-slate-800 mb-4">
               Upload Payment Screenshot
             </h2>
             <div
-              onClick={() => fileInputRef.current?.click()}
-              className="border-2 border-dashed border-slate-300 rounded-xl p-6 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all"
+              onClick={() => !submitting && !submitted && fileInputRef.current?.click()}
+              className={`border-2 border-dashed border-slate-300 rounded-xl p-6 text-center transition-all
+                ${submitting || submitted ? "opacity-50" : "cursor-pointer hover:border-blue-400 hover:bg-blue-50"}`}
             >
               {preview ? (
                 <img
@@ -193,12 +240,15 @@ function SubmitPayment() {
           <Button
             onClick={handleSubmit}
             loading={submitting}
+            disabled={submitted}
             size="lg"
             variant="success"
           >
-            {paymentMode === "cash"
-              ? "Report Cash Payment"
-              : "Submit Payment"}
+            {submitted
+              ? "Submitted!"
+              : paymentMode === "cash"
+                ? "Report Cash Payment"
+                : "Submit Payment"}
           </Button>
         )}
       </main>

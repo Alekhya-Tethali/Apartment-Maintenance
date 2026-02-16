@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Apartment Maintenance",
-  description: "Track apartment maintenance payments",
+  title: "Laurel Residency",
+  description: "Laurel Residency — Maintenance Tracker",
   manifest: "/manifest.json",
 };
 

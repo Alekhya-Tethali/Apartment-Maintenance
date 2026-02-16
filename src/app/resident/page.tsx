@@ -23,14 +23,43 @@ interface PaymentData {
   month: number;
   year: number;
   monthId: number;
+  monthStatus: string;
+  dueDateDay: number;
   amount: number;
   paymentMode: PaymentMode;
   status: PaymentStatus;
   submittedAt: string;
   adminNote: string | null;
+  hasScreenshot: boolean;
 }
 
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function getLateInfo(payment: PaymentData): string | null {
+  const dueDate = new Date(payment.year, payment.month - 1, payment.dueDateDay);
+  const submittedDate = new Date(payment.submittedAt);
+
+  if (submittedDate <= dueDate) return null;
+
+  const diffDays = Math.ceil(
+    (submittedDate.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)
+  );
+
+  if (diffDays <= 0) return null;
+  return `Submitted ${diffDays} day${diffDays > 1 ? "s" : ""} after due date`;
+}
+
+function isEditable(payment: PaymentData): boolean {
+  // Can only edit if payment is still in initial pending state and month is open
+  if (payment.monthStatus === "closed") return false;
+  if (payment.status === "paid") return false;
+  if (payment.status === "pending_collection") return false;
+  // pending_verification without screenshot = upload failed, allow retry
+  // pending_verification with screenshot = waiting on admin
+  // pending_security = waiting on security confirmation
+  // rejected = can resubmit
+  return true;
+}
 
 export default function ResidentDashboard() {
   const router = useRouter();
@@ -71,7 +100,7 @@ export default function ResidentDashboard() {
         setCurrentPayment(monthPayment || null);
       }
 
-      // Past payments (not current month)
+      // Past payments (not current month) — includes closed months
       const past = paymentsData.filter(
         (p: PaymentData) => !openMonth || p.monthId !== openMonth.id
       );
@@ -105,7 +134,7 @@ export default function ResidentDashboard() {
         />
       )}
       <NavBar
-        title="My Maintenance"
+        title="Laurel Residency"
         subtitle={session ? `Flat ${session.flatNumber}` : ""}
       />
       <main className="max-w-lg mx-auto p-4 space-y-4">
@@ -134,20 +163,36 @@ export default function ResidentDashboard() {
                   <span className="text-slate-600">Status</span>
                   <StatusBadge status={currentPayment.status} />
                 </div>
+
+                {/* Screenshot upload failed — allow retry */}
+                {currentPayment.status === "pending_verification" &&
+                  !currentPayment.hasScreenshot &&
+                  currentPayment.paymentMode !== "cash" && (
+                  <div className="bg-yellow-50 p-3 rounded-xl text-sm text-yellow-800">
+                    Screenshot upload failed. Please resubmit your payment.
+                  </div>
+                )}
+
                 {currentPayment.adminNote && (
                   <div className="bg-red-50 p-3 rounded-xl text-sm text-red-700">
                     <strong>Note:</strong> {currentPayment.adminNote}
                   </div>
                 )}
-                {currentPayment.status === "rejected" && (
+
+                {/* Action buttons based on editable state */}
+                {isEditable(currentPayment) && (
                   <Button
                     onClick={() =>
                       router.push(`/resident/submit?monthId=${currentMonth.id}`)
                     }
-                    variant="primary"
+                    variant={currentPayment.status === "rejected" ? "primary" : "outline"}
                     size="lg"
                   >
-                    Resubmit Payment
+                    {currentPayment.status === "rejected"
+                      ? "Resubmit Payment"
+                      : currentPayment.status === "pending_verification" && !currentPayment.hasScreenshot
+                        ? "Retry Submission"
+                        : "Change Payment"}
                   </Button>
                 )}
               </div>
@@ -190,20 +235,30 @@ export default function ResidentDashboard() {
               Payment History
             </h3>
             <div className="space-y-2">
-              {pastPayments.map((p) => (
-                <Card key={p.id} className="flex justify-between items-center">
-                  <div>
-                    <div className="font-medium text-slate-800">
-                      {MONTH_NAMES[p.month - 1]} {p.year}
+              {pastPayments.map((p) => {
+                const lateInfo = getLateInfo(p);
+                return (
+                  <Card key={p.id}>
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="font-medium text-slate-800">
+                          {MONTH_NAMES[p.month - 1]} {p.year}
+                        </div>
+                        <div className="text-sm text-slate-500">
+                          ₹{p.amount.toLocaleString("en-IN")} via{" "}
+                          {PAYMENT_MODE_LABELS[p.paymentMode]}
+                        </div>
+                        {lateInfo && (
+                          <div className="text-xs text-amber-600 mt-1">
+                            {lateInfo}
+                          </div>
+                        )}
+                      </div>
+                      <StatusBadge status={p.status} />
                     </div>
-                    <div className="text-sm text-slate-500">
-                      ₹{p.amount.toLocaleString("en-IN")} via{" "}
-                      {PAYMENT_MODE_LABELS[p.paymentMode]}
-                    </div>
-                  </div>
-                  <StatusBadge status={p.status} />
-                </Card>
-              ))}
+                  </Card>
+                );
+              })}
             </div>
           </div>
         )}

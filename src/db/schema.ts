@@ -45,6 +45,7 @@ export const payments = sqliteTable(
     screenshotBlobUrl: text("screenshot_blob_url"),
     screenshotIv: text("screenshot_iv"),
     screenshotTag: text("screenshot_tag"),
+    paymentDate: text("payment_date"),
     submittedAt: text("submitted_at")
       .notNull()
       .$defaultFn(() => new Date().toISOString()),
@@ -55,6 +56,20 @@ export const payments = sqliteTable(
   },
   (table) => [uniqueIndex("flat_month_idx").on(table.flatId, table.monthId)]
 );
+
+export const reminders = sqliteTable("reminders", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  flatId: integer("flat_id")
+    .notNull()
+    .references(() => flats.id),
+  monthId: integer("month_id")
+    .notNull()
+    .references(() => months.id),
+  sentBy: text("sent_by").notNull(),
+  sentAt: text("sent_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+});
 
 export const config = sqliteTable("config", {
   key: text("key").primaryKey(),

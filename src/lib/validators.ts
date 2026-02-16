@@ -10,6 +10,8 @@ export const loginSchema = z.object({
 export const submitPaymentSchema = z.object({
   monthId: z.number().int().positive(),
   paymentMode: z.enum(["gpay", "phonepe", "cash"]),
+  paymentDate: z.string().optional(),
+  skipScreenshot: z.boolean().optional(),
 });
 
 export const rejectPaymentSchema = z.object({
@@ -35,4 +37,5 @@ export const updateConfigSchema = z.object({
   telegramAdminChatId: z.string().optional(),
   telegramSecurityChatId: z.string().optional(),
   adminWhatsappNumber: z.string().optional(),
+  webappUrl: z.string().optional(),
 });

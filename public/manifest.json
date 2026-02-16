@@ -1,7 +1,7 @@
 {
-  "name": "Apartment Maintenance",
-  "short_name": "Maintenance",
-  "description": "Track apartment maintenance payments",
+  "name": "Laurel Residency — Maintenance",
+  "short_name": "Laurel",
+  "description": "Laurel Residency — Maintenance Tracker",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#1e40af",

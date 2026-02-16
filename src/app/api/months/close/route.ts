@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { months } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { months, payments, flats } from "@/db/schema";
+import { eq, and, count } from "drizzle-orm";
 import { getSession } from "@/lib/auth";
 
 export async function POST(request: Request) {
@@ -25,6 +25,29 @@ export async function POST(request: Request) {
 
     if (monthRow[0].status === "closed") {
       return NextResponse.json({ error: "Month already closed" }, { status: 400 });
+    }
+
+    // Check that all flats have paid
+    const allFlats = await db.select({ total: count() }).from(flats);
+    const totalFlats = allFlats[0]?.total ?? 0;
+
+    const paidPayments = await db
+      .select({ total: count() })
+      .from(payments)
+      .where(
+        and(
+          eq(payments.monthId, monthId),
+          eq(payments.status, "paid")
+        )
+      );
+    const paidCount = paidPayments[0]?.total ?? 0;
+
+    if (paidCount < totalFlats) {
+      const unpaid = totalFlats - paidCount;
+      return NextResponse.json(
+        { error: `Cannot close: ${unpaid} flat${unpaid > 1 ? "s" : ""} still unpaid` },
+        { status: 400 }
+      );
     }
 
     await db

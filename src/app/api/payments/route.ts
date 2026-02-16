@@ -26,6 +26,8 @@ export async function GET(request: Request) {
         monthId: payments.monthId,
         month: months.month,
         year: months.year,
+        monthStatus: months.status,
+        dueDateDay: months.dueDateDay,
         amount: payments.amount,
         paymentMode: payments.paymentMode,
         status: payments.status,
@@ -34,6 +36,7 @@ export async function GET(request: Request) {
         verifiedAt: payments.verifiedAt,
         collectedAt: payments.collectedAt,
         adminNote: payments.adminNote,
+        paymentDate: payments.paymentDate,
         hasScreenshot: payments.screenshotBlobUrl,
       })
       .from(payments)
@@ -45,11 +48,6 @@ export async function GET(request: Request) {
     // Resident: only own payments
     if (session.role === "resident" && session.flatId) {
       query = query.where(eq(payments.flatId, session.flatId));
-    }
-
-    // Security: only open months
-    if (session.role === "security") {
-      query = query.where(eq(months.status, "open"));
     }
 
     // Filter by monthId
@@ -92,7 +90,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid input" }, { status: 400 });
     }
 
-    const { monthId, paymentMode } = parsed.data;
+    const { monthId, paymentMode, paymentDate } = parsed.data;
 
     // Verify month is open
     const monthRow = await db
@@ -119,7 +117,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Flat not found" }, { status: 404 });
     }
 
-    // Check for existing active payment (not rejected)
+    // Check for existing payment
     const existing = await db
       .select()
       .from(payments)
@@ -131,15 +129,24 @@ export async function POST(request: Request) {
       )
       .limit(1);
 
-    if (existing[0] && existing[0].status !== "rejected") {
-      return NextResponse.json(
-        { error: "Payment already submitted for this month" },
-        { status: 400 }
-      );
-    }
+    if (existing[0]) {
+      // Allow resubmission if:
+      // - rejected by admin
+      // - pending_verification without screenshot (upload failed)
+      // - pending_verification or pending_security (resident wants to change mode before admin/security acts)
+      const canResubmit =
+        existing[0].status === "rejected" ||
+        existing[0].status === "pending_verification" ||
+        existing[0].status === "pending_security";
 
-    // If previous was rejected, delete it so new one can be created
-    if (existing[0] && existing[0].status === "rejected") {
+      if (!canResubmit) {
+        return NextResponse.json(
+          { error: "Payment already submitted for this month" },
+          { status: 400 }
+        );
+      }
+
+      // Delete the old payment so new one can be created
       await db.delete(payments).where(eq(payments.id, existing[0].id));
     }
 
@@ -156,6 +163,7 @@ export async function POST(request: Request) {
         monthId,
         amount: flat[0].maintenanceAmount,
         paymentMode,
+        paymentDate: paymentDate || new Date().toISOString().split("T")[0],
         status: initialStatus,
       })
       .returning();

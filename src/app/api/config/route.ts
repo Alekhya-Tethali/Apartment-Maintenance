@@ -6,7 +6,7 @@ import { getSession } from "@/lib/auth";
 import { hashPassword } from "@/lib/hash";
 import { updateConfigSchema } from "@/lib/validators";
 
-const SAFE_KEYS = ["due_date_day", "admin_whatsapp_number"];
+const SAFE_KEYS = ["due_date_day", "admin_whatsapp_number", "webapp_url"];
 
 export async function GET() {
   const session = await getSession();
@@ -75,6 +75,10 @@ export async function PATCH(request: Request) {
 
     if (data.adminWhatsappNumber !== undefined) {
       await upsertConfig("admin_whatsapp_number", data.adminWhatsappNumber);
+    }
+
+    if (data.webappUrl !== undefined) {
+      await upsertConfig("webapp_url", data.webappUrl);
     }
 
     return NextResponse.json({ success: true });
