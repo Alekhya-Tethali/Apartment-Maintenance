@@ -1,0 +1,1 @@
+ALTER TABLE `payments` RENAME COLUMN "watchman_confirmed_at" TO "security_confirmed_at";
