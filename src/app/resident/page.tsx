@@ -144,7 +144,7 @@ export default function ResidentDashboard() {
                   !currentPayment.hasScreenshot &&
                   currentPayment.paymentMode !== "cash" && (
                   <div className="bg-indigo-50 p-3 rounded-xl text-sm text-indigo-700">
-                    Submitted without screenshot. You can upload it below.
+                    Submitted without screenshot. You can edit your submission to add one.
                   </div>
                 )}
 
@@ -165,9 +165,7 @@ export default function ResidentDashboard() {
                   >
                     {currentPayment.status === "rejected"
                       ? "Resubmit Payment"
-                      : currentPayment.status === "pending_verification" && !currentPayment.hasScreenshot
-                        ? "Upload Screenshot"
-                        : "Change Payment"}
+                      : "Edit Submission"}
                   </Button>
                 )}
               </div>

@@ -187,45 +187,69 @@ export default function PendingPayments() {
             </p>
           </Card>
         ) : (
-          payments.map((p) => (
-            <Card key={p.id}>
-              <div className="flex justify-between items-start mb-3">
-                <div>
-                  <div className="font-bold text-lg text-slate-800">
-                    Flat {p.flatNumber}
+          (() => {
+            // Group payments by month, sorted newest first
+            const grouped = new Map<string, PendingPayment[]>();
+            const sorted = [...payments].sort((a, b) => b.year - a.year || b.month - a.month);
+            for (const p of sorted) {
+              const key = `${p.year}-${p.month}`;
+              const list = grouped.get(key) || [];
+              list.push(p);
+              grouped.set(key, list);
+            }
+            return [...grouped.entries()].map(([key, monthPayments]) => {
+              const first = monthPayments[0];
+              return (
+                <div key={key} className="space-y-2">
+                  <div className="flex items-center gap-2 px-1">
+                    <h3 className="text-sm font-semibold text-slate-500">
+                      {MONTH_NAMES[first.month - 1]} {first.year}
+                    </h3>
+                    <span className="text-xs text-slate-400">({monthPayments.length})</span>
                   </div>
-                  <div className="text-sm text-slate-500">
-                    {PAYMENT_MODE_LABELS[p.paymentMode]} — ₹{p.amount.toLocaleString("en-IN")}
-                  </div>
-                  <div className="text-xs text-slate-400">
-                    {MONTH_NAMES[p.month - 1]} {p.year} — {new Date(p.submittedAt).toLocaleDateString("en-IN")}
-                  </div>
+                  {monthPayments.map((p) => (
+                    <Card key={p.id}>
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <div className="font-bold text-lg text-slate-800">
+                            Flat {p.flatNumber}
+                          </div>
+                          <div className="text-sm text-slate-500">
+                            {PAYMENT_MODE_LABELS[p.paymentMode]} — ₹{p.amount.toLocaleString("en-IN")}
+                          </div>
+                          <div className="text-xs text-slate-400">
+                            {new Date(p.submittedAt).toLocaleDateString("en-IN")}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        {p.hasScreenshot && (
+                          <Button variant="outline" size="sm" onClick={() => viewScreenshot(p.id)}>
+                            View Screenshot
+                          </Button>
+                        )}
+                        <Button
+                          variant="success"
+                          size="sm"
+                          onClick={() => handleApprove(p.id)}
+                          loading={actionId === p.id}
+                        >
+                          Approve
+                        </Button>
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          onClick={() => setRejectId(p.id)}
+                        >
+                          Reject
+                        </Button>
+                      </div>
+                    </Card>
+                  ))}
                 </div>
-              </div>
-              <div className="flex gap-2">
-                {p.hasScreenshot && (
-                  <Button variant="outline" size="sm" onClick={() => viewScreenshot(p.id)}>
-                    View Screenshot
-                  </Button>
-                )}
-                <Button
-                  variant="success"
-                  size="sm"
-                  onClick={() => handleApprove(p.id)}
-                  loading={actionId === p.id}
-                >
-                  Approve
-                </Button>
-                <Button
-                  variant="danger"
-                  size="sm"
-                  onClick={() => setRejectId(p.id)}
-                >
-                  Reject
-                </Button>
-              </div>
-            </Card>
-          ))
+              );
+            });
+          })()
         )}
       </main>
     </div>
