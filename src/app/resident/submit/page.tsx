@@ -5,15 +5,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import NavBar from "@/components/NavBar";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
+import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Toast from "@/components/ui/Toast";
 
 export default function SubmitPaymentPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full" />
-      </div>
-    }>
+    <Suspense fallback={<LoadingSpinner fullPage />}>
       <SubmitPayment />
     </Suspense>
   );
@@ -122,9 +119,9 @@ function SubmitPayment() {
           </h2>
           <div className="space-y-3">
             {[
-              { value: "gpay", label: "GPay", icon: "💳", color: "bg-blue-50 border-blue-200" },
-              { value: "phonepe", label: "PhonePe", icon: "📱", color: "bg-purple-50 border-purple-200" },
-              { value: "cash", label: "Cash to Security", icon: "💵", color: "bg-green-50 border-green-200" },
+              { value: "gpay", label: "GPay", icon: "💳", color: "bg-indigo-50 border-indigo-200" },
+              { value: "phonepe", label: "PhonePe", icon: "📱", color: "bg-violet-50 border-violet-200" },
+              { value: "cash", label: "Cash to Security", icon: "💵", color: "bg-emerald-50 border-emerald-200" },
             ].map((mode) => (
               <button
                 key={mode.value}
@@ -132,7 +129,7 @@ function SubmitPayment() {
                 disabled={submitting || submitted}
                 className={`w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-all text-left
                   ${paymentMode === mode.value
-                    ? "border-blue-500 bg-blue-50 shadow-sm"
+                    ? "border-indigo-500 bg-indigo-50 shadow-sm"
                     : `${mode.color} hover:shadow-sm`}
                   ${(submitting || submitted) ? "opacity-50 cursor-not-allowed" : ""}`}
               >
@@ -141,7 +138,7 @@ function SubmitPayment() {
                   {mode.label}
                 </span>
                 {paymentMode === mode.value && (
-                  <span className="ml-auto text-blue-600 font-bold text-xl">✓</span>
+                  <span className="ml-auto text-indigo-600 font-bold text-xl">✓</span>
                 )}
               </button>
             ))}
@@ -158,28 +155,9 @@ function SubmitPayment() {
               onChange={(e) => setPaymentDate(e.target.value)}
               disabled={submitting || submitted}
               max={new Date().toISOString().split("T")[0]}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
             <p className="text-xs text-slate-400 mt-1">When was the payment actually made?</p>
-          </Card>
-        )}
-
-        {/* Submit without screenshot option */}
-        {paymentMode && paymentMode !== "cash" && (
-          <Card>
-            <label className="flex items-center gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={skipScreenshot}
-                onChange={(e) => setSkipScreenshot(e.target.checked)}
-                disabled={submitting || submitted}
-                className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-              />
-              <div>
-                <div className="text-sm font-medium text-slate-800">Submit without screenshot</div>
-                <div className="text-xs text-slate-500">You can upload it later from the dashboard</div>
-              </div>
-            </label>
           </Card>
         )}
 
@@ -192,7 +170,7 @@ function SubmitPayment() {
             <div
               onClick={() => !submitting && !submitted && fileInputRef.current?.click()}
               className={`border-2 border-dashed border-slate-300 rounded-xl p-6 text-center transition-all
-                ${submitting || submitted ? "opacity-50" : "cursor-pointer hover:border-blue-400 hover:bg-blue-50"}`}
+                ${submitting || submitted ? "opacity-50" : "cursor-pointer hover:border-indigo-400 hover:bg-indigo-50"}`}
             >
               {preview ? (
                 <img
@@ -216,18 +194,30 @@ function SubmitPayment() {
               ref={fileInputRef}
               type="file"
               accept="image/*"
-              capture="environment"
               onChange={handleFileChange}
               className="hidden"
             />
           </Card>
         )}
 
+        {/* Submit without screenshot — subtle link below upload */}
+        {paymentMode && paymentMode !== "cash" && !skipScreenshot && (
+          <div className="text-center">
+            <button
+              onClick={() => setSkipScreenshot(true)}
+              disabled={submitting || submitted}
+              className="text-xs text-slate-400 underline hover:text-slate-600 disabled:opacity-50"
+            >
+              Submit without screenshot
+            </button>
+          </div>
+        )}
+
         {/* Cash Confirmation */}
         {paymentMode === "cash" && (
           <Card>
-            <div className="bg-yellow-50 p-4 rounded-xl">
-              <p className="text-yellow-800 font-medium">
+            <div className="bg-amber-50 p-4 rounded-xl">
+              <p className="text-amber-800 font-medium">
                 After submitting, the security will need to confirm they received
                 the cash from you in person.
               </p>

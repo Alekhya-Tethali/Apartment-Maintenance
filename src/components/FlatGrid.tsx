@@ -1,19 +1,17 @@
 "use client";
 
-import { FLAT_GRID_COLORS, STATUS_LABELS, type PaymentStatus } from "@/lib/constants";
+import { getStatusLabel, type PaymentStatus, type Role } from "@/lib/constants";
+import { FLAT_GRID_TILE_COLORS, getThemeStatusColor } from "@/lib/theme";
+import type { FlatStatus } from "@/lib/types";
 
-export interface FlatStatus {
-  flatNumber: string;
-  flatId: number;
-  amount: number;
-  status: PaymentStatus | "not_paid" | "overdue";
-  paymentId?: number;
-  lastRemindedAt?: string | null;
-}
+export type { FlatStatus };
 
 interface FlatGridProps {
   flats: FlatStatus[];
   onFlatClick?: (flat: FlatStatus) => void;
+  securityName?: string;
+  adminName?: string;
+  role?: Role;
 }
 
 function formatRemindedAgo(isoString: string): string {
@@ -25,18 +23,19 @@ function formatRemindedAgo(isoString: string): string {
   return `Reminded ${diffDays}d ago`;
 }
 
-export default function FlatGrid({ flats, onFlatClick }: FlatGridProps) {
+export default function FlatGrid({ flats, onFlatClick, securityName, adminName, role }: FlatGridProps) {
   return (
     <div className="grid grid-cols-3 gap-2">
       {flats.map((flat) => {
         const colorClass =
-          FLAT_GRID_COLORS[flat.status] || FLAT_GRID_COLORS.not_paid;
+          getThemeStatusColor(FLAT_GRID_TILE_COLORS, flat.status, role)
+          || getThemeStatusColor(FLAT_GRID_TILE_COLORS, "not_paid");
         const label =
           flat.status === "not_paid"
             ? "Not Paid"
             : flat.status === "overdue"
               ? "Overdue"
-              : STATUS_LABELS[flat.status as PaymentStatus];
+              : getStatusLabel(flat.status as PaymentStatus, securityName, role, adminName);
 
         const isDefaulter = flat.status === "not_paid" || flat.status === "overdue";
 

@@ -1,20 +1,23 @@
-import { STATUS_COLORS, STATUS_LABELS, type PaymentStatus } from "@/lib/constants";
+import { getStatusLabel, getStatusColor, type PaymentStatus, type Role } from "@/lib/constants";
 
 interface StatusBadgeProps {
   status: PaymentStatus;
   className?: string;
+  securityName?: string;
+  adminName?: string;
+  role?: Role;
 }
 
-export default function StatusBadge({ status, className = "" }: StatusBadgeProps) {
+export default function StatusBadge({ status, className = "", securityName, adminName, role }: StatusBadgeProps) {
   return (
     <span
       className={`
         inline-block px-3 py-1 rounded-full text-sm font-medium border
-        ${STATUS_COLORS[status]}
+        ${getStatusColor(status, role)}
         ${className}
       `}
     >
-      {STATUS_LABELS[status]}
+      {getStatusLabel(status, securityName, role, adminName)}
     </span>
   );
 }

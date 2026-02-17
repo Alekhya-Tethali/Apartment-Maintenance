@@ -4,42 +4,11 @@ import { useEffect, useState, useCallback } from "react";
 import NavBar from "@/components/NavBar";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
+import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Toast from "@/components/ui/Toast";
 import { generateWhatsAppLink } from "@/lib/whatsapp";
-
-interface FlatData {
-  id: number;
-  flatNumber: string;
-  maintenanceAmount: number;
-  phone?: string;
-}
-
-interface MonthData {
-  id: number;
-  month: number;
-  year: number;
-  status: string;
-}
-
-interface PaymentData {
-  flatId: number;
-  monthId: number;
-  status: string;
-}
-
-interface ReminderData {
-  id: number;
-  flatId: number;
-  flatNumber: string;
-  monthId: number;
-  sentBy: string;
-  sentAt: string;
-}
-
-const MONTH_NAMES = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
+import { MONTH_NAMES } from "@/lib/constants";
+import type { FlatData, MonthData, PaymentData, ReminderData } from "@/lib/types";
 
 function formatReminderMessage(
   flatNumber: string,
@@ -210,11 +179,7 @@ export default function RemindDefaulters() {
   }
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full" />
-      </div>
-    );
+    return <LoadingSpinner fullPage />;
   }
 
   return (
@@ -230,12 +195,12 @@ export default function RemindDefaulters() {
 
       <main className="max-w-lg mx-auto p-4 space-y-4">
         {currentMonth && (
-          <Card className="bg-red-50 border-red-200">
+          <Card className="bg-rose-50 border-rose-200">
             <div className="text-center">
-              <div className="text-3xl font-bold text-red-700">
+              <div className="text-3xl font-bold text-rose-700">
                 {defaulters.length}
               </div>
-              <div className="text-sm text-red-600">
+              <div className="text-sm text-rose-600">
                 Unpaid flats for {MONTH_NAMES[currentMonth.month - 1]}{" "}
                 {currentMonth.year}
               </div>
@@ -245,7 +210,7 @@ export default function RemindDefaulters() {
 
         {defaulters.length === 0 ? (
           <Card>
-            <p className="text-green-600 text-center py-4 font-medium">
+            <p className="text-emerald-600 text-center py-4 font-medium">
               All flats have paid! No reminders needed.
             </p>
           </Card>
@@ -261,7 +226,7 @@ export default function RemindDefaulters() {
                     <div className="font-bold text-lg text-slate-800">
                       Flat {flat.flatNumber}
                     </div>
-                    <div className="text-lg font-semibold text-red-600">
+                    <div className="text-lg font-semibold text-rose-600">
                       ₹{flat.maintenanceAmount.toLocaleString("en-IN")}
                     </div>
                   </div>

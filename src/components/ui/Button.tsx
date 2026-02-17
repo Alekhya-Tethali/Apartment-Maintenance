@@ -1,18 +1,12 @@
 "use client";
 
+import { BUTTON_VARIANTS } from "@/lib/theme";
+
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: "primary" | "secondary" | "danger" | "success" | "outline";
   size?: "sm" | "md" | "lg";
   loading?: boolean;
 }
-
-const variants = {
-  primary: "bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800",
-  secondary: "bg-slate-600 text-white hover:bg-slate-700 active:bg-slate-800",
-  danger: "bg-red-600 text-white hover:bg-red-700 active:bg-red-800",
-  success: "bg-green-600 text-white hover:bg-green-700 active:bg-green-800",
-  outline: "bg-white text-slate-700 border-2 border-slate-300 hover:bg-slate-50 active:bg-slate-100",
-};
 
 const sizes = {
   sm: "px-3 py-2 text-sm",
@@ -32,7 +26,7 @@ export default function Button({
   return (
     <button
       className={`
-        ${variants[variant]}
+        ${BUTTON_VARIANTS[variant]}
         ${sizes[size]}
         rounded-xl font-semibold
         transition-colors duration-150

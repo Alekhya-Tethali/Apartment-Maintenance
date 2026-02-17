@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { months, payments, flats } from "@/db/schema";
+import { months, payments, flats, config } from "@/db/schema";
 import { eq, and, count } from "drizzle-orm";
 import { getSession } from "@/lib/auth";
+import { generateMonthReport } from "@/lib/pdf";
+import { notifyAdminWithDocument } from "@/lib/telegram";
 
 export async function POST(request: Request) {
   const session = await getSession();
@@ -57,6 +59,51 @@ export async function POST(request: Request) {
         closedAt: new Date().toISOString(),
       })
       .where(eq(months.id, monthId));
+
+    // Generate and send PDF report
+    try {
+      const monthPayments = await db
+        .select({
+          flatNumber: flats.flatNumber,
+          amount: payments.amount,
+          paymentMode: payments.paymentMode,
+          submittedAt: payments.submittedAt,
+          status: payments.status,
+          securityConfirmedAt: payments.securityConfirmedAt,
+          collectedAt: payments.collectedAt,
+        })
+        .from(payments)
+        .innerJoin(flats, eq(payments.flatId, flats.id))
+        .where(eq(payments.monthId, monthId));
+
+      const secNameRow = await db.select().from(config).where(eq(config.key, "security_name")).limit(1);
+      const secName = secNameRow[0]?.value || "Security";
+      const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+      const monthLabel = `${MONTH_NAMES[monthRow[0].month - 1]} ${monthRow[0].year}`;
+
+      const reportRows = monthPayments.map((p) => {
+        let statusDesc = "Paid";
+        if (p.paymentMode === "cash") {
+          statusDesc = `Cash — collected from ${secName}`;
+        } else {
+          statusDesc = `Verified (${p.paymentMode === "gpay" ? "GPay" : "PhonePe"})`;
+        }
+        return {
+          flatNumber: p.flatNumber,
+          amount: p.amount,
+          paymentMode: p.paymentMode,
+          submittedAt: p.submittedAt,
+          statusDescription: statusDesc,
+        };
+      });
+
+      const pdfBuffer = generateMonthReport(monthLabel, reportRows, totalFlats);
+      const filename = `Laurel-Residency-${monthLabel.replace(" ", "-")}.pdf`;
+      await notifyAdminWithDocument(pdfBuffer, filename, `Monthly report for ${monthLabel}`);
+    } catch (pdfError) {
+      console.error("PDF generation/send failed:", pdfError);
+      // Don't block the close operation
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

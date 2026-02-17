@@ -95,3 +95,40 @@ export function formatWhatsAppReminder(
   msg += "\n\nThank you.";
   return msg;
 }
+
+export async function sendTelegramDocument(
+  chatId: string,
+  buffer: Buffer,
+  filename: string,
+  caption?: string
+): Promise<boolean> {
+  const token = await getConfig("telegram_bot_token");
+  if (!token || !chatId) return false;
+
+  try {
+    const formData = new FormData();
+    formData.append("chat_id", chatId);
+    formData.append("document", new Blob([new Uint8Array(buffer)]), filename);
+    if (caption) formData.append("caption", caption);
+
+    const url = `https://api.telegram.org/bot${token}/sendDocument`;
+    const response = await fetch(url, {
+      method: "POST",
+      body: formData,
+    });
+    return response.ok;
+  } catch (error) {
+    console.error("Telegram document send failed:", error);
+    return false;
+  }
+}
+
+export async function notifyAdminWithDocument(
+  buffer: Buffer,
+  filename: string,
+  caption?: string
+): Promise<boolean> {
+  const chatId = await getConfig("telegram_admin_chat_id");
+  if (!chatId) return false;
+  return sendTelegramDocument(chatId, buffer, filename, caption);
+}

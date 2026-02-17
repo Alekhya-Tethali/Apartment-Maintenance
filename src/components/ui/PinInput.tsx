@@ -68,7 +68,7 @@ export default function PinInput({
           disabled={disabled}
           className="w-14 h-16 text-center text-2xl font-bold
             border-2 border-slate-300 rounded-xl
-            focus:border-blue-500 focus:ring-2 focus:ring-blue-200
+            focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200
             outline-none transition-all
             disabled:bg-slate-100 disabled:opacity-50"
         />

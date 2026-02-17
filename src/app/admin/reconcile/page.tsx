@@ -4,25 +4,18 @@ import { useEffect, useState, useCallback } from "react";
 import NavBar from "@/components/NavBar";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
+import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Toast from "@/components/ui/Toast";
-
-interface PendingCash {
-  id: number;
-  flatNumber: string;
-  amount: number;
-  submittedAt: string;
-  securityConfirmedAt: string;
-  month: number;
-  year: number;
-}
-
-const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+import { MONTH_NAMES } from "@/lib/constants";
+import { useAppConfig } from "@/hooks/useAppConfig";
+import type { PendingCash, ToastState } from "@/lib/types";
 
 export default function ReconcileCash() {
   const [payments, setPayments] = useState<PendingCash[]>([]);
   const [loading, setLoading] = useState(true);
   const [collectingId, setCollectingId] = useState<number | null>(null);
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [toast, setToast] = useState<ToastState>(null);
+  const { securityName } = useAppConfig();
 
   const loadData = useCallback(async () => {
     try {
@@ -64,11 +57,7 @@ export default function ReconcileCash() {
   const totalAmount = payments.reduce((sum, p) => sum + p.amount, 0);
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full" />
-      </div>
-    );
+    return <LoadingSpinner fullPage />;
   }
 
   return (
@@ -76,7 +65,7 @@ export default function ReconcileCash() {
       {toast && (
         <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
       )}
-      <NavBar title="Collect from Security" backHref="/admin" />
+      <NavBar title={`Collect from ${securityName || "Security"}`} backHref="/admin" />
 
       <main className="max-w-lg mx-auto p-4 space-y-4">
         {payments.length > 0 && (
@@ -86,7 +75,7 @@ export default function ReconcileCash() {
                 ₹{totalAmount.toLocaleString("en-IN")}
               </div>
               <div className="text-sm text-orange-600">
-                Total to collect from security ({payments.length} flats)
+                Total to collect from {securityName || "security"} ({payments.length} flats)
               </div>
             </div>
           </Card>

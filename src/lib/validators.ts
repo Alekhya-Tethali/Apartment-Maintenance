@@ -38,4 +38,6 @@ export const updateConfigSchema = z.object({
   telegramSecurityChatId: z.string().optional(),
   adminWhatsappNumber: z.string().optional(),
   webappUrl: z.string().optional(),
+  securityName: z.string().optional(),
+  adminName: z.string().optional(),
 });

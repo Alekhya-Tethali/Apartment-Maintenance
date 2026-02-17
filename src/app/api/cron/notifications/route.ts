@@ -5,7 +5,7 @@ import { eq, and } from "drizzle-orm";
 import { notifyAdmin, notifySecurity, formatDefaulterList, formatWhatsAppReminder } from "@/lib/telegram";
 import { decryptText } from "@/lib/crypto";
 
-const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+import { MONTH_NAMES } from "@/lib/constants";
 
 export async function GET(request: Request) {
   // Verify cron secret

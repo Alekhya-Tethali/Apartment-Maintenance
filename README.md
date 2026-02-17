@@ -32,33 +32,48 @@ A mobile-first web application for tracking apartment maintenance payments acros
 - **Monthly lifecycle** — Admin opens/closes months; system tracks payment status per flat per month
 
 ### Admin Dashboard
-- **Color-coded 12-flat grid** — Green (paid), Yellow (pending verification), Orange (cash to collect), Red (unpaid/overdue)
-- **Summary statistics** — Total collected, pending approvals, cash to collect
+- **Color-coded 12-flat grid** — Emerald (paid), Amber (pending verification), Orange (cash to collect), Rose (unpaid/overdue)
+- **Smart summary statistics** — Total collected, expected (open months only), pending approvals, cash to collect, defaulter count with amount
 - **Payment approval/rejection** — View encrypted screenshots, approve or reject with reason
+- **Payment detail view** — Click any payment to see full details, screenshot, dates, admin notes; admin can approve, reject, or override status
+- **Admin status override** — Force-change any payment status (e.g., mark as paid when resident couldn't submit on the app)
+- **Record payment on behalf** — Admin can create payment records for residents who paid outside the app
 - **Cash reconciliation** — See total owed by security, mark individual payments as collected
-- **Month management** — Open new months, close completed ones
+- **Month management** — Open new months, close completed ones; PDF report auto-sent to Telegram on close
+- **PDF reports** — Auto-generated on month close + manual download from months page
 - **Flat configuration** — Set maintenance amount, PIN, and phone number per flat
 - **Remind defaulters** — Pre-formatted WhatsApp messages with one-tap send for each defaulter
-- **Historical view** — Track payment patterns across all months
+- **Historical view** — Track payment patterns across all months with year-grouped calendar navigation
+- **Settings organized** — Admin, Security, Telegram, and App sections clearly separated
 
 ### Security Staff View
-- **All-flat status grid** — See who has paid and who hasn't for open months
+- **All-flat status grid** — See who has paid and who hasn't, with month navigation
 - **Cash confirmation** — Confirm cash receipts when resident is physically present
-- **Follow-up list** — See pending flats to remind
-- **Restricted visibility** — Can only see open months (closed months are hidden)
+- **Payment history** — Click any flat to see full payment history; tap a payment for details (read-only)
+- **Follow-up list** — See pending flats to remind, with cooldown tracking
+- **Month navigation** — Same MonthSelector as admin with year tabs and chronological months
 
 ### Resident View
-- **Simple dashboard** — Current month status, amount due, due date
+- **Smart dashboard** — Current calendar month prioritized, amount due, due date, with past months below
 - **One-tap payment flow** — Select mode → upload screenshot (if digital) → done
-- **Payment history** — See all past payments and their statuses
+- **Payment history** — See past months with late payment indicators (clock icon + days late)
+- **Payment detail** — Tap any past payment to see full details (read-only)
 - **Rejection handling** — If admin rejects a screenshot, resident can resubmit
+- **Role-aware statuses** — Resident sees friendly labels like "Completed", "Admin Reviewing", "Security Confirmed"
+
+### Theming & Personalization
+- **Warm indigo/emerald palette** — Centralized theme system (`theme.ts`) with all color tokens
+- **Configurable display names** — Admin name and security name shown in status labels (e.g., "Bangar Reddy Reviewing", "Ramesh's Confirmation Pending")
+- **Role-aware status labels** — Each role sees different, contextually appropriate labels for the same status
 
 ### Automation
 - **Daily cron job** — Runs at 8 AM IST
   - **11th of month**: Telegram notification to security with defaulter list
   - **20th of month**: Telegram notification to admin with defaulter list + ready-to-copy WhatsApp messages
-  - **All flats paid**: Telegram notification to admin with collection summary
+  - **All flats paid**: Telegram notification to admin with collection summary (dynamic security name)
+- **Consolidation reminder** — When all flats have submitted, admin gets a breakdown of digital vs. cash amounts
 - **Real-time notifications** — Admin gets Telegram alerts when new payments are submitted
+- **PDF on month close** — Auto-generated PDF report sent to admin via Telegram
 - **Auto month opening** — New month auto-opens on the 1st if not already created
 
 ---
@@ -237,13 +252,18 @@ src/
 │       │   ├── reject/route.ts               # POST: Admin rejects with reason
 │       │   ├── security-confirm/route.ts     # POST: Security confirms cash receipt
 │       │   ├── collect/route.ts              # POST: Admin marks cash collected
+│       │   ├── admin-update/route.ts         # PATCH: Override status | POST: Create on behalf
 │       │   └── upload-screenshot/route.ts    # POST: Encrypt + upload to Blob
 │       ├── screenshots/route.ts              # GET: Decrypt + serve screenshot
 │       ├── months/
 │       │   ├── route.ts                      # GET: List | POST: Open new month
-│       │   └── close/route.ts                # POST: Close a month
+│       │   ├── close/route.ts                # POST: Close a month + auto PDF
+│       │   └── [monthId]/report/route.ts     # GET: Download PDF report
 │       ├── flats/route.ts                    # GET: List | PATCH: Update flat config
-│       ├── config/route.ts                   # GET/PATCH: App settings
+│       ├── config/
+│       │   ├── route.ts                      # GET/PATCH: App settings (admin)
+│       │   └── public/route.ts               # GET: Public config (display names)
+│       ├── reminders/route.ts                # GET/POST: Reminder tracking
 │       ├── remind/route.ts                   # POST: Generate WhatsApp reminders
 │       └── cron/notifications/route.ts       # GET: Daily smart cron handler
 │
@@ -257,22 +277,32 @@ src/
 │   ├── crypto.ts                             # AES-256-GCM encrypt/decrypt
 │   ├── hash.ts                               # bcryptjs hash/verify
 │   ├── rate-limit.ts                         # DB-backed login rate limiting
-│   ├── telegram.ts                           # Telegram Bot API helpers
+│   ├── telegram.ts                           # Telegram Bot API helpers (messages + documents)
 │   ├── whatsapp.ts                           # WhatsApp deep link generator
-│   ├── constants.ts                          # Enums, status colors, labels
+│   ├── constants.ts                          # Enums, role-aware status labels + colors
+│   ├── theme.ts                              # Centralized color tokens for all components
+│   ├── types.ts                              # TypeScript interfaces + helper functions
+│   ├── pdf.ts                                # jsPDF-based monthly report generation
 │   └── validators.ts                         # Zod schemas for API input
+│
+├── hooks/
+│   └── useAppConfig.ts                       # Client hook for public config (display names)
 │
 ├── middleware.ts                              # JWT verification + role-based routing
 │
 └── components/
     ├── ui/
-    │   ├── Button.tsx                        # Reusable button with variants + loading
+    │   ├── Button.tsx                        # Reusable button with theme-aware variants
     │   ├── Card.tsx                          # White rounded card container
+    │   ├── LoadingSpinner.tsx                # Themed loading spinner
     │   ├── PinInput.tsx                      # 4-digit PIN input with auto-focus
-    │   └── Toast.tsx                         # Success/error notification toast
-    ├── FlatGrid.tsx                          # 12-flat color-coded grid
-    ├── StatusBadge.tsx                       # Color-coded status pill
-    └── NavBar.tsx                            # Role-aware header with logout
+    │   └── Toast.tsx                         # Theme-aware success/error toast
+    ├── FlatGrid.tsx                          # 12-flat color-coded grid (role-aware colors)
+    ├── FlatPaymentModal.tsx                  # Flat payment history modal with clickable cards
+    ├── PaymentDetailModal.tsx                # Payment detail view with admin actions
+    ├── MonthSelector.tsx                     # Year-grouped month navigation with calendar dropdown
+    ├── StatusBadge.tsx                       # Role-aware color-coded status pill
+    └── NavBar.tsx                            # Theme-aware header with logout
 ```
 
 ---
@@ -426,6 +456,8 @@ Open http://localhost:3000
 | POST | `/api/payments/reject` | Admin | Reject with reason |
 | POST | `/api/payments/security-confirm` | Security | Confirm cash receipt |
 | POST | `/api/payments/collect` | Admin | Mark cash as collected |
+| PATCH | `/api/payments/admin-update` | Admin | Override payment status |
+| POST | `/api/payments/admin-update` | Admin | Create payment on behalf of resident |
 | POST | `/api/payments/upload-screenshot` | Resident | Upload encrypted screenshot |
 | GET | `/api/screenshots?paymentId=N` | Admin | Decrypt and serve screenshot |
 
@@ -434,20 +466,42 @@ Open http://localhost:3000
 |--------|----------|------|-------------|
 | GET | `/api/months` | Any | List months (security sees open only) |
 | POST | `/api/months` | Admin | Open a new month |
-| POST | `/api/months/close` | Admin | Close a month |
+| POST | `/api/months/close` | Admin | Close month + auto-generate PDF report |
+| GET | `/api/months/:id/report` | Admin | Download PDF report for a month |
 
 ### Flats & Config
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | GET | `/api/flats` | Any | List all flats |
 | PATCH | `/api/flats` | Admin | Update flat config |
-| GET | `/api/config` | Admin | Get app settings |
+| GET | `/api/config` | Admin | Get app settings (sensitive values masked) |
 | PATCH | `/api/config` | Admin | Update settings |
+| GET | `/api/config/public` | Any | Get public config (display names only) |
+
+### Reminders
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/reminders?monthId=N` | Any | List reminders for a month |
+| POST | `/api/reminders` | Admin/Security | Record a reminder sent to a flat |
 
 ### Cron
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | GET | `/api/cron/notifications` | CRON_SECRET | Daily notification handler |
+
+---
+
+## Testing with Dummy Data
+
+Seed 14 months of test data (Dec 2024 - Jan 2026) with varied payment statuses:
+```bash
+npm run db:seed:dummy
+```
+
+Clear all seed data (preserves flats and config):
+```bash
+npm run db:seed:clear
+```
 
 ---
 

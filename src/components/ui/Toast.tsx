@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { TOAST_STYLES } from "@/lib/theme";
 
 interface ToastProps {
   message: string;
@@ -8,12 +9,6 @@ interface ToastProps {
   onClose: () => void;
   duration?: number;
 }
-
-const typeStyles = {
-  success: "bg-green-600 text-white",
-  error: "bg-red-600 text-white",
-  info: "bg-blue-600 text-white",
-};
 
 export default function Toast({
   message,
@@ -37,7 +32,7 @@ export default function Toast({
         fixed top-4 left-1/2 -translate-x-1/2 z-50
         px-6 py-3 rounded-xl shadow-lg
         transition-all duration-300
-        ${typeStyles[type]}
+        ${TOAST_STYLES[type]}
         ${visible ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2"}
       `}
     >
