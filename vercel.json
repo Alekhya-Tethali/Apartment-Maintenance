@@ -1,5 +1,6 @@
 {
-    "crons": [
+  "installCommand": "yarn install --network-timeout 600000",
+  "crons": [
     {
       "path": "/api/cron/notifications",
       "schedule": "30 2 * * *"
