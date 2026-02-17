@@ -8,6 +8,7 @@ interface NavBarProps {
   subtitle?: string;
   showLogout?: boolean;
   backHref?: string;
+  actions?: React.ReactNode;
 }
 
 export default function NavBar({
@@ -15,6 +16,7 @@ export default function NavBar({
   subtitle,
   showLogout = true,
   backHref,
+  actions,
 }: NavBarProps) {
   const router = useRouter();
 
@@ -44,14 +46,17 @@ export default function NavBar({
             )}
           </div>
         </div>
-        {showLogout && (
-          <button
-            onClick={handleLogout}
-            className={`text-sm ${NAV_BAR.logoutBg} ${NAV_BAR.logoutHover} px-3 py-2 rounded-lg transition-colors`}
-          >
-            Logout
-          </button>
-        )}
+        <div className="flex items-center gap-1">
+          {actions}
+          {showLogout && (
+            <button
+              onClick={handleLogout}
+              className={`text-sm ${NAV_BAR.logoutBg} ${NAV_BAR.logoutHover} px-3 py-2 rounded-lg transition-colors`}
+            >
+              Logout
+            </button>
+          )}
+        </div>
       </div>
     </header>
   );

@@ -106,6 +106,7 @@ export default function ReconcileCash() {
                   size="sm"
                   loading={collectingId === p.id}
                   onClick={() => handleCollect(p.id)}
+                  className="!w-auto"
                 >
                   Collected
                 </Button>

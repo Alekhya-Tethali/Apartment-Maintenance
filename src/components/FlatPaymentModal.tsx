@@ -39,12 +39,51 @@ export default function FlatPaymentModal({
   onPaymentUpdate,
 }: FlatPaymentModalProps) {
   const [selectedPayment, setSelectedPayment] = useState<PaymentData | null>(null);
+  const [recordingPayment, setRecordingPayment] = useState(false);
+  const [recordMode, setRecordMode] = useState<string>("cash");
+  const [recordError, setRecordError] = useState<string | null>(null);
 
   if (!flat) return null;
 
   const flatReminders = reminders.filter((r) => r.flatId === flat.flatId);
   const isDefaulter = flat.status === "not_paid" || flat.status === "overdue";
   const isOpenMonth = selectedMonth?.status === "open";
+  const isAdmin = role === "admin";
+
+  // Check if current selected month has a payment for this flat
+  const hasCurrentMonthPayment = selectedMonth
+    ? payments.some((p) => p.monthId === selectedMonth.id)
+    : true;
+
+  const handleRecordPayment = async () => {
+    if (!selectedMonth || !flat) return;
+    setRecordingPayment(true);
+    setRecordError(null);
+    try {
+      const res = await fetch("/api/payments/admin-update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          flatId: flat.flatId,
+          monthId: selectedMonth.id,
+          amount: flat.amount,
+          paymentMode: recordMode,
+          status: "paid",
+          adminNote: "Recorded by admin",
+        }),
+      });
+      if (res.ok) {
+        onPaymentUpdate?.();
+      } else {
+        const data = await res.json();
+        setRecordError(data.error || "Failed to record");
+      }
+    } catch {
+      setRecordError("Network error");
+    } finally {
+      setRecordingPayment(false);
+    }
+  };
 
   // Sort payments chronologically descending (newest first)
   const sortedPayments = [...payments].sort(
@@ -91,6 +130,43 @@ export default function FlatPaymentModal({
 
           {/* Body */}
           <div className="p-4 overflow-y-auto max-h-[65vh]">
+            {/* Admin: Record payment for current month if missing */}
+            {isAdmin && isOpenMonth && !hasCurrentMonthPayment && !loadingHistory && selectedMonth && (
+              <div className="mb-4 border-2 border-dashed border-amber-300 bg-amber-50 rounded-xl p-3 space-y-2">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <div className="text-sm font-semibold text-amber-800">
+                      No payment for {MONTH_NAMES[selectedMonth.month - 1]} {selectedMonth.year}
+                    </div>
+                    <div className="text-xs text-amber-600">
+                      ₹{flat.amount.toLocaleString("en-IN")}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={recordMode}
+                    onChange={(e) => setRecordMode(e.target.value)}
+                    className="px-2 py-1.5 border rounded-lg text-xs bg-white flex-shrink-0"
+                  >
+                    <option value="cash">Cash</option>
+                    <option value="gpay">GPay</option>
+                    <option value="phonepe">PhonePe</option>
+                  </select>
+                  <button
+                    onClick={handleRecordPayment}
+                    disabled={recordingPayment}
+                    className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 whitespace-nowrap"
+                  >
+                    {recordingPayment ? "Recording..." : "Record as Paid"}
+                  </button>
+                </div>
+                {recordError && (
+                  <div className="text-xs text-rose-600">{recordError}</div>
+                )}
+              </div>
+            )}
+
             {loadingHistory ? (
               <div className="flex justify-center py-8">
                 <LoadingSpinner size="sm" />
@@ -103,11 +179,16 @@ export default function FlatPaymentModal({
               <div className="space-y-3">
                 {sortedPayments.map((p) => {
                   const monthReminders = remindersByMonth.get(p.monthId) || [];
+                  const isCurrentMonth = selectedMonth ? p.monthId === selectedMonth.id : false;
                   return (
                     <button
                       key={p.id}
                       onClick={() => setSelectedPayment(p)}
-                      className="w-full text-left border border-slate-200 rounded-xl p-3 hover:border-indigo-300 hover:bg-indigo-50/30 transition-all active:scale-[0.98]"
+                      className={`w-full text-left rounded-xl p-3 transition-all active:scale-[0.98] ${
+                        isCurrentMonth
+                          ? "border-2 border-indigo-400 bg-indigo-50/40 shadow-sm"
+                          : "border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/30"
+                      }`}
                     >
                       <div className="flex justify-between items-start mb-1">
                         <span className="font-semibold text-slate-800">

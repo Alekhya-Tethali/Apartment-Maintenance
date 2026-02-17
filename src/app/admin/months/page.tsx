@@ -218,26 +218,27 @@ export default function MonthManagement() {
                             size="sm"
                             onClick={(e) => handleCloseMonth(e, m.id)}
                             loading={actionLoading === `close-${m.id}`}
+                            className="!w-auto"
                           >
                             Close
                           </Button>
                         ) : (
-                          <div className="flex gap-1">
-                            <Button
-                              variant="outline"
-                              size="sm"
+                          <div className="flex gap-2">
+                            <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 window.open(`/api/months/${m.id}/report`, "_blank");
                               }}
+                              className="px-3 py-2 text-sm font-medium text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
                             >
                               PDF
-                            </Button>
+                            </button>
                             <Button
                               variant="outline"
                               size="sm"
                               onClick={(e) => handleReopenMonth(e, m.id)}
                               loading={actionLoading === `reopen-${m.id}`}
+                              className="!w-auto whitespace-nowrap"
                             >
                               Reopen
                             </Button>

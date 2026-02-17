@@ -3,7 +3,6 @@
 import { useEffect, useState, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import NavBar from "@/components/NavBar";
-import Button from "@/components/ui/Button";
 import FlatGrid from "@/components/FlatGrid";
 import type { FlatStatus } from "@/components/FlatGrid";
 import Toast from "@/components/ui/Toast";
@@ -181,7 +180,33 @@ function AdminDashboard() {
       {toast && (
         <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
       )}
-      <NavBar title="Laurel Residency" subtitle="Admin" />
+      <NavBar
+        title="Laurel Residency"
+        subtitle="Admin"
+        actions={
+          <>
+            <button
+              onClick={() => router.push("/admin/months")}
+              className="p-2 hover:bg-indigo-800 rounded-lg transition-colors"
+              title="Months"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            </button>
+            <button
+              onClick={() => router.push("/admin/settings")}
+              className="p-2 hover:bg-indigo-800 rounded-lg transition-colors"
+              title="Settings"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </button>
+          </>
+        }
+      />
 
       <main className="max-w-lg mx-auto p-4 space-y-4">
         {/* Month Selector with Year Grouping */}
@@ -210,76 +235,37 @@ function AdminDashboard() {
                 </div>
               )}
               {pendingVerify > 0 && (
-                <div className="flex-1 min-w-[30%] bg-amber-50 rounded-xl py-2 px-1">
+                <button
+                  onClick={() => router.push("/admin/payments")}
+                  className="flex-1 min-w-[30%] bg-amber-50 rounded-xl py-2 px-1 hover:bg-amber-100 transition-colors text-center"
+                >
                   <div className="text-lg font-bold text-amber-700">{pendingVerify}</div>
-                  <div className="text-[10px] text-amber-600">To Verify</div>
-                </div>
+                  <div className="text-[10px] text-amber-600">To Verify →</div>
+                </button>
               )}
               {pendingCollect > 0 && (
-                <div className="flex-1 min-w-[30%] bg-orange-50 rounded-xl py-2 px-1">
+                <button
+                  onClick={() => router.push("/admin/reconcile")}
+                  className="flex-1 min-w-[30%] bg-orange-50 rounded-xl py-2 px-1 hover:bg-orange-100 transition-colors text-center"
+                >
                   <div className="text-lg font-bold text-orange-700">₹{cashToCollect.toLocaleString("en-IN")}</div>
-                  <div className="text-[10px] text-orange-600">From Security</div>
-                </div>
+                  <div className="text-[10px] text-orange-600">From Security →</div>
+                </button>
               )}
               {selectedMonth.status === "open" && defaulterCount > 0 && (
-                <div className="flex-1 min-w-[30%] bg-rose-50 rounded-xl py-2 px-1">
+                <button
+                  onClick={() => router.push("/admin/remind")}
+                  className="flex-1 min-w-[30%] bg-rose-50 rounded-xl py-2 px-1 hover:bg-rose-100 transition-colors text-center"
+                >
                   <div className="text-lg font-bold text-rose-700">{defaulterCount}</div>
-                  <div className="text-[10px] text-rose-600">Defaulters (₹{defaulterAmount.toLocaleString("en-IN")})</div>
-                </div>
+                  <div className="text-[10px] text-rose-600">Defaulters (₹{defaulterAmount.toLocaleString("en-IN")}) →</div>
+                </button>
               )}
             </div>
 
             {/* Flat Grid */}
             <FlatGrid flats={gridData} onFlatClick={handleFlatClick} securityName={securityName} adminName={adminName} role="admin" />
 
-            {/* Primary Actions — only when actionable */}
-            {(pendingVerify > 0 || pendingCollect > 0) && (
-              <div className="space-y-2">
-                {pendingVerify > 0 && (
-                  <Button
-                    onClick={() => router.push("/admin/payments")}
-                    variant="primary"
-                    size="lg"
-                  >
-                    Pending Approvals ({pendingVerify})
-                  </Button>
-                )}
-                {pendingCollect > 0 && (
-                  <Button
-                    onClick={() => router.push("/admin/reconcile")}
-                    variant="outline"
-                    size="lg"
-                  >
-                    Collect Cash — ₹{cashToCollect.toLocaleString("en-IN")}
-                  </Button>
-                )}
-              </div>
-            )}
-
-            {/* Secondary Actions */}
-            <div className="grid grid-cols-3 gap-2">
-              <Button
-                onClick={() => router.push("/admin/remind")}
-                variant="outline"
-                size="sm"
-              >
-                Remind
-              </Button>
-              <Button
-                onClick={() => router.push("/admin/months")}
-                variant="outline"
-                size="sm"
-              >
-                Months
-              </Button>
-              <Button
-                onClick={() => router.push("/admin/settings")}
-                variant="outline"
-                size="sm"
-              >
-                Settings
-              </Button>
-            </div>
           </>
         )}
       </main>
