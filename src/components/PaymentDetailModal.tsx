@@ -163,10 +163,12 @@ export default function PaymentDetailModal({
   };
 
   // Determine which primary actions are available
-  const canApprove = isAdmin && payment.status === "pending_verification";
-  const canReject = isAdmin && payment.status === "pending_verification";
-  const canCollect = isAdmin && payment.status === "pending_collection";
-  const canOverride = isAdmin && payment.status !== "paid";
+  const isClosedMonth = payment.monthStatus === "closed";
+  const canApprove = isAdmin && !isClosedMonth && payment.status === "pending_verification";
+  const canReject = isAdmin && !isClosedMonth && payment.status === "pending_verification";
+  const canCollect = isAdmin && !isClosedMonth && payment.status === "pending_collection";
+  const canOverride = isAdmin && !isClosedMonth && payment.status !== "paid";
+  const hasActions = canApprove || canReject || canCollect || canOverride;
 
   return (
     <>
@@ -291,8 +293,8 @@ export default function PaymentDetailModal({
               <div className="bg-emerald-50 p-3 rounded-xl text-sm text-emerald-700">{success}</div>
             )}
 
-            {/* Admin Actions */}
-            {isAdmin && !success && (
+            {/* Admin Actions — only for open months with actionable states */}
+            {hasActions && !success && (
               <div className="border-t border-slate-200 pt-4 space-y-3">
                 <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Actions</h4>
 
