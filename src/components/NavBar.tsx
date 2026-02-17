@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { NAV_BAR } from "@/lib/theme";
 
 interface NavBarProps {
   title: string;
@@ -23,13 +24,13 @@ export default function NavBar({
   };
 
   return (
-    <header className="bg-blue-700 text-white px-4 py-3 sticky top-0 z-40">
+    <header className={`${NAV_BAR.bg} text-white px-4 py-3 sticky top-0 z-40`}>
       <div className="flex items-center justify-between max-w-lg mx-auto">
         <div className="flex items-center gap-3">
           {backHref && (
             <button
               onClick={() => router.push(backHref)}
-              className="p-1 hover:bg-blue-600 rounded-lg transition-colors"
+              className={`p-1 ${NAV_BAR.hoverBg} rounded-lg transition-colors`}
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -39,14 +40,14 @@ export default function NavBar({
           <div>
             <h1 className="text-lg font-bold">{title}</h1>
             {subtitle && (
-              <p className="text-blue-200 text-sm">{subtitle}</p>
+              <p className={`${NAV_BAR.subtitleText} text-sm`}>{subtitle}</p>
             )}
           </div>
         </div>
         {showLogout && (
           <button
             onClick={handleLogout}
-            className="text-sm bg-blue-600 hover:bg-blue-500 px-3 py-2 rounded-lg transition-colors"
+            className={`text-sm ${NAV_BAR.logoutBg} ${NAV_BAR.logoutHover} px-3 py-2 rounded-lg transition-colors`}
           >
             Logout
           </button>

@@ -5,33 +5,12 @@ import { useRouter } from "next/navigation";
 import NavBar from "@/components/NavBar";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
+import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Toast from "@/components/ui/Toast";
-
-interface MonthData {
-  id: number;
-  month: number;
-  year: number;
-  status: string;
-  closedAt: string | null;
-}
-
-interface PaymentData {
-  monthId: number;
-  amount: number;
-  status: string;
-}
-
-const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+import { MONTH_NAMES } from "@/lib/constants";
+import { getProgressColor } from "@/lib/theme";
+import type { MonthData, PaymentData, ToastState } from "@/lib/types";
 const TOTAL_FLATS = 12;
-
-function getProgressColor(paid: number, total: number): string {
-  const ratio = total > 0 ? paid / total : 0;
-  if (ratio >= 1) return "bg-green-500";
-  if (ratio >= 0.75) return "bg-green-400";
-  if (ratio >= 0.5) return "bg-yellow-400";
-  if (ratio >= 0.25) return "bg-orange-400";
-  return "bg-red-400";
-}
 
 export default function MonthManagement() {
   const router = useRouter();
@@ -39,7 +18,7 @@ export default function MonthManagement() {
   const [payments, setPayments] = useState<PaymentData[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [toast, setToast] = useState<ToastState>(null);
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
 
   const loadData = useCallback(async () => {
@@ -159,11 +138,7 @@ export default function MonthManagement() {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full" />
-      </div>
-    );
+    return <LoadingSpinner fullPage />;
   }
 
   // Get unique years
@@ -200,7 +175,7 @@ export default function MonthManagement() {
                 onClick={() => setSelectedYear(y)}
                 className={`px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all
                   ${selectedYear === y
-                    ? "bg-blue-600 text-white"
+                    ? "bg-indigo-600 text-white"
                     : "bg-white text-slate-600 border border-slate-200"}`}
               >
                 {y}
@@ -232,7 +207,7 @@ export default function MonthManagement() {
                         <div className="font-bold text-slate-800 text-lg">
                           {MONTH_NAMES[m.month - 1]} {m.year}
                         </div>
-                        <div className={`text-xs font-medium ${isOpen ? "text-green-600" : "text-slate-400"}`}>
+                        <div className={`text-xs font-medium ${isOpen ? "text-emerald-600" : "text-slate-400"}`}>
                           {isOpen ? "Open" : `Closed${m.closedAt ? ` ${new Date(m.closedAt).toLocaleDateString("en-IN")}` : ""}`}
                         </div>
                       </div>
@@ -247,14 +222,26 @@ export default function MonthManagement() {
                             Close
                           </Button>
                         ) : (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={(e) => handleReopenMonth(e, m.id)}
-                            loading={actionLoading === `reopen-${m.id}`}
-                          >
-                            Reopen
-                          </Button>
+                          <div className="flex gap-1">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                window.open(`/api/months/${m.id}/report`, "_blank");
+                              }}
+                            >
+                              PDF
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => handleReopenMonth(e, m.id)}
+                              loading={actionLoading === `reopen-${m.id}`}
+                            >
+                              Reopen
+                            </Button>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -264,7 +251,7 @@ export default function MonthManagement() {
                       <div className="flex-1">
                         <div className="w-full bg-slate-200 rounded-full h-2.5">
                           <div
-                            className={`h-2.5 rounded-full transition-all ${getProgressColor(stats.paid, TOTAL_FLATS)}`}
+                            className={`h-2.5 rounded-full transition-all ${getProgressColor(TOTAL_FLATS > 0 ? stats.paid / TOTAL_FLATS : 0)}`}
                             style={{ width: `${(stats.submitted / TOTAL_FLATS) * 100}%` }}
                           />
                         </div>
@@ -276,12 +263,12 @@ export default function MonthManagement() {
 
                     {/* Stats row */}
                     <div className="flex gap-3 text-xs text-slate-500">
-                      <span className="text-green-600">{stats.paid} paid</span>
+                      <span className="text-emerald-600">{stats.paid} paid</span>
                       {stats.pending > 0 && (
-                        <span className="text-yellow-600">{stats.pending} pending</span>
+                        <span className="text-amber-600">{stats.pending} pending</span>
                       )}
                       {stats.collected > 0 && (
-                        <span className="text-blue-600">₹{stats.collected.toLocaleString("en-IN")}</span>
+                        <span className="text-indigo-600">₹{stats.collected.toLocaleString("en-IN")}</span>
                       )}
                     </div>
                   </div>

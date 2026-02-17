@@ -4,23 +4,15 @@ import { useEffect, useState } from "react";
 import NavBar from "@/components/NavBar";
 import Card from "@/components/ui/Card";
 import StatusBadge from "@/components/StatusBadge";
-import { PAYMENT_MODE_LABELS, type PaymentStatus, type PaymentMode } from "@/lib/constants";
-
-interface PaymentData {
-  id: number;
-  month: number;
-  year: number;
-  amount: number;
-  paymentMode: PaymentMode;
-  status: PaymentStatus;
-  submittedAt: string;
-}
-
-const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import { PAYMENT_MODE_LABELS, MONTH_NAMES } from "@/lib/constants";
+import { useAppConfig } from "@/hooks/useAppConfig";
+import type { PaymentData } from "@/lib/types";
 
 export default function PaymentHistory() {
   const [payments, setPayments] = useState<PaymentData[]>([]);
   const [loading, setLoading] = useState(true);
+  const { securityName, adminName } = useAppConfig();
 
   useEffect(() => {
     fetch("/api/payments")
@@ -31,11 +23,7 @@ export default function PaymentHistory() {
   }, []);
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full" />
-      </div>
-    );
+    return <LoadingSpinner fullPage />;
   }
 
   return (
@@ -61,7 +49,7 @@ export default function PaymentHistory() {
                   {new Date(p.submittedAt).toLocaleDateString("en-IN")}
                 </div>
               </div>
-              <StatusBadge status={p.status} />
+              <StatusBadge status={p.status} securityName={securityName} adminName={adminName} role="resident" />
             </Card>
           ))
         )}

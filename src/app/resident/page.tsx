@@ -6,34 +6,12 @@ import NavBar from "@/components/NavBar";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import StatusBadge from "@/components/StatusBadge";
+import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Toast from "@/components/ui/Toast";
-import { PAYMENT_MODE_LABELS, type PaymentStatus, type PaymentMode } from "@/lib/constants";
-
-interface MonthData {
-  id: number;
-  month: number;
-  year: number;
-  status: string;
-  dueDateDay: number;
-}
-
-interface PaymentData {
-  id: number;
-  flatNumber: string;
-  month: number;
-  year: number;
-  monthId: number;
-  monthStatus: string;
-  dueDateDay: number;
-  amount: number;
-  paymentMode: PaymentMode;
-  status: PaymentStatus;
-  submittedAt: string;
-  adminNote: string | null;
-  hasScreenshot: boolean;
-}
-
-const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+import { useAppConfig } from "@/hooks/useAppConfig";
+import { PAYMENT_MODE_LABELS, MONTH_NAMES } from "@/lib/constants";
+import { findCurrentMonth } from "@/lib/types";
+import type { MonthData, PaymentData, ToastState } from "@/lib/types";
 
 function getLateInfo(payment: PaymentData): string | null {
   const dueDate = new Date(payment.year, payment.month - 1, payment.dueDateDay);
@@ -68,7 +46,8 @@ export default function ResidentDashboard() {
   const [currentPayment, setCurrentPayment] = useState<PaymentData | null>(null);
   const [pastPayments, setPastPayments] = useState<PaymentData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [toast, setToast] = useState<ToastState>(null);
+  const { securityName, adminName } = useAppConfig();
 
   useEffect(() => {
     loadData();
@@ -88,22 +67,22 @@ export default function ResidentDashboard() {
 
       setSession(sessionData);
 
-      // Find current open month
-      const openMonth = monthsData.find((m: MonthData) => m.status === "open");
-      setCurrentMonth(openMonth || null);
+      // Find current month — prefer open month matching current calendar month
+      const bestMonth = findCurrentMonth(monthsData);
+      setCurrentMonth(bestMonth);
 
       // Find payment for current month
-      if (openMonth) {
+      if (bestMonth) {
         const monthPayment = paymentsData.find(
-          (p: PaymentData) => p.monthId === openMonth.id
+          (p: PaymentData) => p.monthId === bestMonth.id
         );
         setCurrentPayment(monthPayment || null);
       }
 
-      // Past payments (not current month) — includes closed months
-      const past = paymentsData.filter(
-        (p: PaymentData) => !openMonth || p.monthId !== openMonth.id
-      );
+      // Past payments (not current month) — sorted newest first
+      const past = paymentsData
+        .filter((p: PaymentData) => !bestMonth || p.monthId !== bestMonth.id)
+        .sort((a: PaymentData, b: PaymentData) => b.year - a.year || b.month - a.month);
       setPastPayments(past);
     } catch {
       setToast({ message: "Failed to load data", type: "error" });
@@ -113,11 +92,7 @@ export default function ResidentDashboard() {
   }
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full" />
-      </div>
-    );
+    return <LoadingSpinner fullPage />;
   }
 
   const isOverdue = currentMonth
@@ -161,20 +136,20 @@ export default function ResidentDashboard() {
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-slate-600">Status</span>
-                  <StatusBadge status={currentPayment.status} />
+                  <StatusBadge status={currentPayment.status} securityName={securityName} adminName={adminName} role="resident" />
                 </div>
 
-                {/* Screenshot upload failed — allow retry */}
+                {/* Submitted without screenshot — neutral info */}
                 {currentPayment.status === "pending_verification" &&
                   !currentPayment.hasScreenshot &&
                   currentPayment.paymentMode !== "cash" && (
-                  <div className="bg-yellow-50 p-3 rounded-xl text-sm text-yellow-800">
-                    Screenshot upload failed. Please resubmit your payment.
+                  <div className="bg-indigo-50 p-3 rounded-xl text-sm text-indigo-700">
+                    Submitted without screenshot. You can upload it below.
                   </div>
                 )}
 
                 {currentPayment.adminNote && (
-                  <div className="bg-red-50 p-3 rounded-xl text-sm text-red-700">
+                  <div className="bg-rose-50 p-3 rounded-xl text-sm text-rose-700">
                     <strong>Note:</strong> {currentPayment.adminNote}
                   </div>
                 )}
@@ -191,7 +166,7 @@ export default function ResidentDashboard() {
                     {currentPayment.status === "rejected"
                       ? "Resubmit Payment"
                       : currentPayment.status === "pending_verification" && !currentPayment.hasScreenshot
-                        ? "Retry Submission"
+                        ? "Upload Screenshot"
                         : "Change Payment"}
                   </Button>
                 )}
@@ -200,11 +175,11 @@ export default function ResidentDashboard() {
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
                   <span className="text-slate-600">Due</span>
-                  <span className="text-xl font-bold text-red-600">Unpaid</span>
+                  <span className="text-xl font-bold text-rose-600">Unpaid</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-slate-600">Due Date</span>
-                  <span className={`font-medium ${isOverdue ? "text-red-600" : "text-slate-700"}`}>
+                  <span className={`font-medium ${isOverdue ? "text-rose-600" : "text-slate-700"}`}>
                     {currentMonth.dueDateDay}th {MONTH_NAMES[currentMonth.month - 1]}
                     {isOverdue && " (Overdue!)"}
                   </span>
@@ -228,14 +203,14 @@ export default function ResidentDashboard() {
           </Card>
         )}
 
-        {/* Payment History */}
+        {/* Past Months */}
         {pastPayments.length > 0 && (
           <div>
             <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-2 px-1">
-              Payment History
+              Past Months
             </h3>
             <div className="space-y-2">
-              {pastPayments.map((p) => {
+              {pastPayments.slice(0, 3).map((p) => {
                 const lateInfo = getLateInfo(p);
                 return (
                   <Card key={p.id}>
@@ -249,17 +224,30 @@ export default function ResidentDashboard() {
                           {PAYMENT_MODE_LABELS[p.paymentMode]}
                         </div>
                         {lateInfo && (
-                          <div className="text-xs text-amber-600 mt-1">
+                          <div className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.828a1 1 0 101.415-1.414L11 9.586V6z" clipRule="evenodd" />
+                            </svg>
                             {lateInfo}
                           </div>
                         )}
                       </div>
-                      <StatusBadge status={p.status} />
+                      <StatusBadge status={p.status} securityName={securityName} adminName={adminName} role="resident" />
                     </div>
                   </Card>
                 );
               })}
             </div>
+            {pastPayments.length > 3 && (
+              <div className="text-center mt-3">
+                <button
+                  onClick={() => router.push("/resident/history")}
+                  className="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
+                >
+                  View All ({pastPayments.length})
+                </button>
+              </div>
+            )}
           </div>
         )}
       </main>

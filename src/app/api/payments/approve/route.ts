@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { payments, flats, months } from "@/db/schema";
+import { payments, flats, months, config } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { getSession } from "@/lib/auth";
 import { notifyAdmin } from "@/lib/telegram";
@@ -57,6 +57,9 @@ export async function POST(request: Request) {
 }
 
 async function checkAllPaid(monthId: number) {
+  const secNameRow = await db.select().from(config).where(eq(config.key, "security_name")).limit(1);
+  const secName = secNameRow[0]?.value || "Security";
+
   const allFlats = await db.select().from(flats);
   const monthPayments = await db
     .select()
@@ -82,7 +85,7 @@ async function checkAllPaid(monthId: number) {
 
     if (cashPayments.length > 0) {
       await notifyAdmin(
-        `All flats have submitted for <b>${monthLabel}</b>!\n\nCollected digitally: ₹${totalCollected.toLocaleString("en-IN")}\nCash to collect from security: ₹${cashTotal.toLocaleString("en-IN")}`
+        `All flats have submitted for <b>${monthLabel}</b>!\n\nCollected digitally: ₹${totalCollected.toLocaleString("en-IN")}\nCash to collect from ${secName}: ₹${cashTotal.toLocaleString("en-IN")}`
       );
     } else if (paidOrCollecting.length >= allFlats.length) {
       await notifyAdmin(

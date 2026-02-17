@@ -4,21 +4,10 @@ import { useEffect, useState, useCallback } from "react";
 import NavBar from "@/components/NavBar";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
+import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Toast from "@/components/ui/Toast";
-import { PAYMENT_MODE_LABELS, type PaymentMode } from "@/lib/constants";
-
-interface PendingPayment {
-  id: number;
-  flatNumber: string;
-  amount: number;
-  paymentMode: PaymentMode;
-  submittedAt: string;
-  hasScreenshot: boolean;
-  month: number;
-  year: number;
-}
-
-const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+import { PAYMENT_MODE_LABELS, MONTH_NAMES } from "@/lib/constants";
+import type { PendingPayment, ToastState } from "@/lib/types";
 
 export default function PendingPayments() {
   const [payments, setPayments] = useState<PendingPayment[]>([]);
@@ -27,7 +16,9 @@ export default function PendingPayments() {
   const [rejectId, setRejectId] = useState<number | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [screenshotLoading, setScreenshotLoading] = useState(false);
+  const [screenshotError, setScreenshotError] = useState(false);
+  const [toast, setToast] = useState<ToastState>(null);
 
   const loadPayments = useCallback(async () => {
     try {
@@ -93,14 +84,18 @@ export default function PendingPayments() {
 
   const viewScreenshot = (paymentId: number) => {
     setScreenshotUrl(`/api/screenshots?paymentId=${paymentId}`);
+    setScreenshotLoading(true);
+    setScreenshotError(false);
+  };
+
+  const closeScreenshot = () => {
+    setScreenshotUrl(null);
+    setScreenshotLoading(false);
+    setScreenshotError(false);
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full" />
-      </div>
-    );
+    return <LoadingSpinner fullPage />;
   }
 
   return (
@@ -110,20 +105,39 @@ export default function PendingPayments() {
       )}
       <NavBar title="Pending Approvals" backHref="/admin" />
 
-      {/* Screenshot Modal */}
+      {/* Screenshot Modal with Loading */}
       {screenshotUrl && (
         <div
           className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4"
-          onClick={() => setScreenshotUrl(null)}
+          onClick={closeScreenshot}
         >
-          <div className="bg-white rounded-2xl max-w-sm w-full max-h-[80vh] overflow-auto p-2">
-            <img
-              src={screenshotUrl}
-              alt="Payment screenshot"
-              className="w-full rounded-xl"
-            />
+          <div
+            className="bg-white rounded-2xl max-w-sm w-full max-h-[80vh] overflow-auto p-2"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {screenshotLoading && (
+              <div className="flex justify-center py-12">
+                <LoadingSpinner size="md" />
+              </div>
+            )}
+            {screenshotError ? (
+              <div className="text-center py-8">
+                <p className="text-rose-500 text-sm">Failed to load screenshot</p>
+              </div>
+            ) : (
+              <img
+                src={screenshotUrl}
+                alt="Payment screenshot"
+                className={`w-full rounded-xl ${screenshotLoading ? "hidden" : ""}`}
+                onLoad={() => setScreenshotLoading(false)}
+                onError={() => {
+                  setScreenshotLoading(false);
+                  setScreenshotError(true);
+                }}
+              />
+            )}
             <Button
-              onClick={() => setScreenshotUrl(null)}
+              onClick={closeScreenshot}
               variant="outline"
               size="sm"
               className="mt-2"
@@ -143,7 +157,7 @@ export default function PendingPayments() {
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
               placeholder="Reason for rejection..."
-              className="w-full p-3 border-2 border-slate-300 rounded-xl resize-none h-24 focus:border-red-500 outline-none"
+              className="w-full p-3 border-2 border-slate-300 rounded-xl resize-none h-24 focus:border-rose-500 outline-none"
             />
             <div className="flex gap-2">
               <Button
