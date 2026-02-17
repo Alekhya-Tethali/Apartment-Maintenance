@@ -1,5 +1,5 @@
 {
-  "installCommand": "npm ci --prefer-offline",
+  "installCommand": "yarn install",
   "crons": [
     {
       "path": "/api/cron/notifications",
