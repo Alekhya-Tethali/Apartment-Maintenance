@@ -1,6 +1,5 @@
 {
-  "installCommand": "yarn install",
-  "crons": [
+    "crons": [
     {
       "path": "/api/cron/notifications",
       "schedule": "30 2 * * *"
