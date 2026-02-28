@@ -9,6 +9,7 @@ export type Role = (typeof ROLES)[keyof typeof ROLES];
 export const PAYMENT_MODES = {
   GPAY: "gpay",
   PHONEPE: "phonepe",
+  UPI_OTHER: "upi_other",
   CASH: "cash",
 } as const;
 
@@ -111,9 +112,10 @@ export function getStatusColor(status: PaymentStatus, role?: Role): string {
 
 // FLAT_GRID_COLORS moved to src/lib/theme.ts as FLAT_GRID_TILE_COLORS (role-aware)
 
-export const PAYMENT_MODE_LABELS: Record<PaymentMode, string> = {
+export const PAYMENT_MODE_LABELS: Record<string, string> = {
   gpay: "GPay",
   phonepe: "PhonePe",
+  upi_other: "UPI",
   cash: "Cash to Security",
 };
 

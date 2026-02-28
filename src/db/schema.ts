@@ -5,9 +5,15 @@ export const flats = sqliteTable("flats", {
   flatNumber: text("flat_number").notNull().unique(),
   maintenanceAmount: real("maintenance_amount").notNull().default(2000),
   pinHash: text("pin_hash").notNull(),
-  phoneEncrypted: text("phone_encrypted"),
-  phoneIv: text("phone_iv"),
-  phoneTag: text("phone_tag"),
+  ownerPhoneEncrypted: text("owner_phone_encrypted"),
+  ownerPhoneIv: text("owner_phone_iv"),
+  ownerPhoneTag: text("owner_phone_tag"),
+  ownerName: text("owner_name"),
+  isRented: integer("is_rented").notNull().default(0),
+  tenantName: text("tenant_name"),
+  tenantPhoneEncrypted: text("tenant_phone_encrypted"),
+  tenantPhoneIv: text("tenant_phone_iv"),
+  tenantPhoneTag: text("tenant_phone_tag"),
   createdAt: text("created_at")
     .notNull()
     .$defaultFn(() => new Date().toISOString()),
@@ -69,6 +75,40 @@ export const reminders = sqliteTable("reminders", {
   sentAt: text("sent_at")
     .notNull()
     .$defaultFn(() => new Date().toISOString()),
+});
+
+export const amountOverrides = sqliteTable(
+  "amount_overrides",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    flatId: integer("flat_id")
+      .notNull()
+      .references(() => flats.id),
+    monthId: integer("month_id")
+      .notNull()
+      .references(() => months.id),
+    amount: real("amount").notNull(),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => [uniqueIndex("flat_month_override_idx").on(table.flatId, table.monthId)]
+);
+
+export const updateRequests = sqliteTable("update_requests", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  flatId: integer("flat_id")
+    .notNull()
+    .references(() => flats.id),
+  requestType: text("request_type").notNull(),
+  requestData: text("request_data").notNull(),
+  status: text("status").notNull().default("pending"),
+  requestedBy: text("requested_by").notNull(),
+  requestedAt: text("requested_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+  reviewedAt: text("reviewed_at"),
+  adminNote: text("admin_note"),
 });
 
 export const config = sqliteTable("config", {

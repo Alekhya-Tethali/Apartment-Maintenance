@@ -120,9 +120,9 @@ export async function GET(request: Request) {
           webappUrl || undefined
         );
         let phoneInfo = "";
-        if (flat.phoneEncrypted && flat.phoneIv && flat.phoneTag) {
+        if (flat.ownerPhoneEncrypted && flat.ownerPhoneIv && flat.ownerPhoneTag) {
           try {
-            const phone = decryptText(flat.phoneEncrypted, flat.phoneIv, flat.phoneTag);
+            const phone = decryptText(flat.ownerPhoneEncrypted, flat.ownerPhoneIv, flat.ownerPhoneTag);
             phoneInfo = ` (wa.me/${phone})`;
           } catch {
             // ignore decryption errors

@@ -1,26 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import NavBar from "@/components/NavBar";
 import Card from "@/components/ui/Card";
 import StatusBadge from "@/components/StatusBadge";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import { useSession } from "@/contexts/SessionContext";
+import { useApiQuery } from "@/hooks/useApiQuery";
+import { apiGetPayments } from "@/lib/api-client";
 import { PAYMENT_MODE_LABELS, MONTH_NAMES } from "@/lib/constants";
-import { useAppConfig } from "@/hooks/useAppConfig";
 import type { PaymentData } from "@/lib/types";
 
 export default function PaymentHistory() {
-  const [payments, setPayments] = useState<PaymentData[]>([]);
-  const [loading, setLoading] = useState(true);
-  const { securityName, adminName } = useAppConfig();
-
-  useEffect(() => {
-    fetch("/api/payments")
-      .then((res) => res.json())
-      .then(setPayments)
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, []);
+  const { config: { securityName, adminName } } = useSession();
+  const { data: payments, loading } = useApiQuery(apiGetPayments);
 
   if (loading) {
     return <LoadingSpinner fullPage />;
@@ -30,12 +22,12 @@ export default function PaymentHistory() {
     <div className="min-h-screen bg-slate-50">
       <NavBar title="Payment History" backHref="/resident" />
       <main className="max-w-lg mx-auto p-4 space-y-2">
-        {payments.length === 0 ? (
+        {!payments || payments.length === 0 ? (
           <Card>
             <p className="text-slate-500 text-center py-4">No payments yet.</p>
           </Card>
         ) : (
-          payments.map((p) => (
+          payments.map((p: PaymentData) => (
             <Card key={p.id} className="flex justify-between items-center">
               <div>
                 <div className="font-medium text-slate-800">

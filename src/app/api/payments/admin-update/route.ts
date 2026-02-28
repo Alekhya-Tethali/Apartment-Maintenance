@@ -20,7 +20,7 @@ export async function PATCH(request: Request) {
   }
 
   try {
-    const { paymentId, status, adminNote } = await request.json();
+    const { paymentId, status, adminNote, amount, paymentMode, paymentDate } = await request.json();
 
     if (!paymentId) {
       return NextResponse.json({ error: "paymentId is required" }, { status: 400 });
@@ -36,6 +36,16 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "Payment not found" }, { status: 404 });
     }
 
+    // Block edits on closed months
+    const month = await db
+      .select()
+      .from(months)
+      .where(eq(months.id, payment[0].monthId))
+      .limit(1);
+    if (month[0]?.status === "closed") {
+      return NextResponse.json({ error: "Cannot edit payment for a closed month" }, { status: 400 });
+    }
+
     const updates: Record<string, unknown> = {};
 
     if (status) {
@@ -46,12 +56,29 @@ export async function PATCH(request: Request) {
       updates.status = status;
 
       // Set relevant timestamps based on target status
+      const effectiveMode = paymentMode || payment[0].paymentMode;
       if (status === "paid" && !payment[0].verifiedAt) {
         updates.verifiedAt = new Date().toISOString();
       }
-      if (status === "paid" && payment[0].paymentMode === "cash" && !payment[0].collectedAt) {
+      if (status === "paid" && effectiveMode === "cash" && !payment[0].collectedAt) {
         updates.collectedAt = new Date().toISOString();
       }
+    }
+
+    if (amount !== undefined && amount > 0) {
+      updates.amount = amount;
+    }
+
+    if (paymentMode) {
+      const validModes = ["cash", "gpay", "phonepe", "upi_other"];
+      if (!validModes.includes(paymentMode)) {
+        return NextResponse.json({ error: "Invalid payment mode" }, { status: 400 });
+      }
+      updates.paymentMode = paymentMode;
+    }
+
+    if (paymentDate) {
+      updates.paymentDate = paymentDate;
     }
 
     if (adminNote !== undefined) {
@@ -70,6 +97,51 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Admin update error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: Request) {
+  const session = await getSession();
+  if (!session || session.role !== "admin") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  try {
+    const { paymentId } = await request.json();
+    if (!paymentId) {
+      return NextResponse.json({ error: "paymentId is required" }, { status: 400 });
+    }
+
+    const payment = await db
+      .select({ id: payments.id, monthId: payments.monthId })
+      .from(payments)
+      .where(eq(payments.id, paymentId))
+      .limit(1);
+
+    if (!payment[0]) {
+      return NextResponse.json({ error: "Payment not found" }, { status: 404 });
+    }
+
+    // Only allow deletion for open months
+    const month = await db
+      .select()
+      .from(months)
+      .where(eq(months.id, payment[0].monthId))
+      .limit(1);
+
+    if (!month[0] || month[0].status === "closed") {
+      return NextResponse.json(
+        { error: "Cannot delete payment for a closed month" },
+        { status: 400 }
+      );
+    }
+
+    await db.delete(payments).where(eq(payments.id, paymentId));
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Delete payment error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
