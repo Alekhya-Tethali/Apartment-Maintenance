@@ -4,8 +4,6 @@ import { getStatusLabel, type PaymentStatus, type Role } from "@/lib/constants";
 import { FLAT_GRID_TILE_COLORS, getThemeStatusColor } from "@/lib/theme";
 import type { FlatStatus } from "@/lib/types";
 
-export type { FlatStatus };
-
 interface FlatGridProps {
   flats: FlatStatus[];
   onFlatClick?: (flat: FlatStatus) => void;

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { NAV_BAR } from "@/lib/theme";
+import { apiLogout } from "@/lib/api-client";
 
 interface NavBarProps {
   title: string;
@@ -21,7 +22,7 @@ export default function NavBar({
   const router = useRouter();
 
   const handleLogout = async () => {
-    await fetch("/api/auth/logout", { method: "POST" });
+    await apiLogout().catch(() => {});
     router.push("/");
   };
 

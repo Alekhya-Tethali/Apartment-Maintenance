@@ -7,9 +7,11 @@ import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Toast from "@/components/ui/Toast";
+import { useToast } from "@/hooks/useToast";
+import { apiGetMonths, apiGetPayments, apiOpenMonth, apiCloseMonth, apiReopenMonth } from "@/lib/api-client";
 import { MONTH_NAMES } from "@/lib/constants";
 import { getProgressColor } from "@/lib/theme";
-import type { MonthData, PaymentData, ToastState } from "@/lib/types";
+import type { MonthData, PaymentData } from "@/lib/types";
 const TOTAL_FLATS = 12;
 
 export default function MonthManagement() {
@@ -18,25 +20,24 @@ export default function MonthManagement() {
   const [payments, setPayments] = useState<PaymentData[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [toast, setToast] = useState<ToastState>(null);
+  const { toast, showToast, clearToast } = useToast();
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const [notifyingMonthId, setNotifyingMonthId] = useState<number | null>(null);
 
   const loadData = useCallback(async () => {
     try {
-      const [monthsRes, paymentsRes] = await Promise.all([
-        fetch("/api/months"),
-        fetch("/api/payments"),
+      const [monthsData, paymentsData] = await Promise.all([
+        apiGetMonths(),
+        apiGetPayments(),
       ]);
-      const monthsData = await monthsRes.json();
-      const paymentsData = await paymentsRes.json();
       setMonths(monthsData);
       setPayments(paymentsData);
     } catch {
-      setToast({ message: "Failed to load", type: "error" });
+      showToast("Failed to load", "error");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [showToast]);
 
   useEffect(() => {
     loadData();
@@ -58,21 +59,12 @@ export default function MonthManagement() {
     }
 
     try {
-      const res = await fetch("/api/months", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ month, year }),
-      });
-      if (res.ok) {
-        setToast({ message: `${MONTH_NAMES[month - 1]} ${year} opened!`, type: "success" });
-        setSelectedYear(year);
-        loadData();
-      } else {
-        const data = await res.json();
-        setToast({ message: data.error, type: "error" });
-      }
-    } catch {
-      setToast({ message: "Network error", type: "error" });
+      await apiOpenMonth(month, year);
+      showToast(`${MONTH_NAMES[month - 1]} ${year} opened!`, "success");
+      setSelectedYear(year);
+      loadData();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Network error", "error");
     } finally {
       setActionLoading(null);
     }
@@ -82,22 +74,35 @@ export default function MonthManagement() {
     e.stopPropagation();
     setActionLoading(`close-${monthId}`);
     try {
-      const res = await fetch("/api/months/close", {
+      await apiCloseMonth(monthId);
+      showToast("Month closed!", "success");
+      loadData();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Network error", "error");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleNotify = async (e: React.MouseEvent, monthId: number) => {
+    e.stopPropagation();
+    setNotifyingMonthId(monthId);
+    try {
+      const res = await fetch("/api/notifications/trigger", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ monthId }),
       });
+      const data = await res.json();
       if (res.ok) {
-        setToast({ message: "Month closed!", type: "success" });
-        loadData();
+        showToast(`Sent to Telegram! ${data.defaulters} defaulter(s)`, "success");
       } else {
-        const data = await res.json();
-        setToast({ message: data.error, type: "error" });
+        showToast(data.error || "Failed to send", "error");
       }
     } catch {
-      setToast({ message: "Network error", type: "error" });
+      showToast("Network error", "error");
     } finally {
-      setActionLoading(null);
+      setNotifyingMonthId(null);
     }
   };
 
@@ -105,20 +110,11 @@ export default function MonthManagement() {
     e.stopPropagation();
     setActionLoading(`reopen-${monthId}`);
     try {
-      const res = await fetch("/api/months/reopen", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ monthId }),
-      });
-      if (res.ok) {
-        setToast({ message: "Month reopened!", type: "success" });
-        loadData();
-      } else {
-        const data = await res.json();
-        setToast({ message: data.error, type: "error" });
-      }
-    } catch {
-      setToast({ message: "Network error", type: "error" });
+      await apiReopenMonth(monthId);
+      showToast("Month reopened!", "success");
+      loadData();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Network error", "error");
     } finally {
       setActionLoading(null);
     }
@@ -153,17 +149,44 @@ export default function MonthManagement() {
   return (
     <div className="min-h-screen bg-slate-50">
       {toast && (
-        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
+        <Toast message={toast.message} type={toast.type} onClose={clearToast} />
       )}
-      <NavBar title="Month Management" backHref="/admin" />
+      <NavBar
+        title="Laurel Residency"
+        subtitle="Admin"
+        actions={
+          <>
+            <button
+              onClick={() => router.push("/admin/requests")}
+              className="p-2 hover:bg-indigo-800 rounded-lg transition-colors"
+              title="Requests"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+            </button>
+            <button
+              onClick={() => router.push("/admin/settings")}
+              className="p-2 hover:bg-indigo-800 rounded-lg transition-colors"
+              title="Settings"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </button>
+          </>
+        }
+      />
 
       <main className="max-w-lg mx-auto p-4 space-y-4">
         <Button
           onClick={handleOpenMonth}
           loading={actionLoading === "open"}
-          size="lg"
+          size="sm"
+          variant="outline"
         >
-          Open Next Month
+          + Open Next Month
         </Button>
 
         {/* Year Selector */}
@@ -213,15 +236,34 @@ export default function MonthManagement() {
                       </div>
                       <div className="flex items-center gap-2">
                         {isOpen ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={(e) => handleCloseMonth(e, m.id)}
-                            loading={actionLoading === `close-${m.id}`}
-                            className="!w-auto"
-                          >
-                            Close
-                          </Button>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={(e) => handleNotify(e, m.id)}
+                              disabled={notifyingMonthId === m.id}
+                              className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors disabled:opacity-50"
+                              title="Send status to Telegram"
+                            >
+                              {notifyingMonthId === m.id ? (
+                                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                </svg>
+                              ) : (
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                                </svg>
+                              )}
+                            </button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => handleCloseMonth(e, m.id)}
+                              loading={actionLoading === `close-${m.id}`}
+                              className="!w-auto"
+                            >
+                              Close
+                            </Button>
+                          </div>
                         ) : (
                           <div className="flex gap-2">
                             <button

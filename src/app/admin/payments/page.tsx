@@ -1,57 +1,34 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useState } from "react";
 import NavBar from "@/components/NavBar";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Toast from "@/components/ui/Toast";
+import ScreenshotLightbox from "@/components/payment-detail/ScreenshotLightbox";
+import { useToast } from "@/hooks/useToast";
+import { useApiQuery } from "@/hooks/useApiQuery";
+import { apiGetPendingPayments, apiApprovePayment, apiRejectPayment } from "@/lib/api-client";
 import { PAYMENT_MODE_LABELS, MONTH_NAMES } from "@/lib/constants";
-import type { PendingPayment, ToastState } from "@/lib/types";
+import type { PendingPayment } from "@/lib/types";
 
 export default function PendingPayments() {
-  const [payments, setPayments] = useState<PendingPayment[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: payments, loading, refetch } = useApiQuery(apiGetPendingPayments);
   const [actionId, setActionId] = useState<number | null>(null);
   const [rejectId, setRejectId] = useState<number | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
-  const [screenshotLoading, setScreenshotLoading] = useState(false);
-  const [screenshotError, setScreenshotError] = useState(false);
-  const [toast, setToast] = useState<ToastState>(null);
-
-  const loadPayments = useCallback(async () => {
-    try {
-      const res = await fetch("/api/payments?status=pending_verification");
-      setPayments(await res.json());
-    } catch {
-      setToast({ message: "Failed to load payments", type: "error" });
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadPayments();
-  }, [loadPayments]);
+  const { toast, showToast, clearToast } = useToast();
 
   const handleApprove = async (paymentId: number) => {
     setActionId(paymentId);
     try {
-      const res = await fetch("/api/payments/approve", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ paymentId }),
-      });
-      if (res.ok) {
-        setToast({ message: "Payment approved!", type: "success" });
-        loadPayments();
-      } else {
-        const data = await res.json();
-        setToast({ message: data.error, type: "error" });
-      }
-    } catch {
-      setToast({ message: "Network error", type: "error" });
+      await apiApprovePayment(paymentId);
+      showToast("Payment approved!", "success");
+      refetch();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Network error", "error");
     } finally {
       setActionId(null);
     }
@@ -61,22 +38,13 @@ export default function PendingPayments() {
     if (!rejectId || !rejectReason) return;
     setActionId(rejectId);
     try {
-      const res = await fetch("/api/payments/reject", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ paymentId: rejectId, reason: rejectReason }),
-      });
-      if (res.ok) {
-        setToast({ message: "Payment rejected", type: "success" });
-        setRejectId(null);
-        setRejectReason("");
-        loadPayments();
-      } else {
-        const data = await res.json();
-        setToast({ message: data.error, type: "error" });
-      }
-    } catch {
-      setToast({ message: "Network error", type: "error" });
+      await apiRejectPayment(rejectId, rejectReason);
+      showToast("Payment rejected", "success");
+      setRejectId(null);
+      setRejectReason("");
+      refetch();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Network error", "error");
     } finally {
       setActionId(null);
     }
@@ -84,68 +52,24 @@ export default function PendingPayments() {
 
   const viewScreenshot = (paymentId: number) => {
     setScreenshotUrl(`/api/screenshots?paymentId=${paymentId}`);
-    setScreenshotLoading(true);
-    setScreenshotError(false);
-  };
-
-  const closeScreenshot = () => {
-    setScreenshotUrl(null);
-    setScreenshotLoading(false);
-    setScreenshotError(false);
   };
 
   if (loading) {
     return <LoadingSpinner fullPage />;
   }
 
+  const items = payments ?? [];
+
   return (
     <div className="min-h-screen bg-slate-50">
       {toast && (
-        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
+        <Toast message={toast.message} type={toast.type} onClose={clearToast} />
       )}
-      <NavBar title="Pending Approvals" backHref="/admin" />
+      <NavBar title="Pending Approvals" backHref="/admin/months" />
 
       {/* Screenshot Modal with Loading */}
       {screenshotUrl && (
-        <div
-          className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4"
-          onClick={closeScreenshot}
-        >
-          <div
-            className="bg-white rounded-2xl max-w-sm w-full max-h-[80vh] overflow-auto p-2"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {screenshotLoading && (
-              <div className="flex justify-center py-12">
-                <LoadingSpinner size="md" />
-              </div>
-            )}
-            {screenshotError ? (
-              <div className="text-center py-8">
-                <p className="text-rose-500 text-sm">Failed to load screenshot</p>
-              </div>
-            ) : (
-              <img
-                src={screenshotUrl}
-                alt="Payment screenshot"
-                className={`w-full rounded-xl ${screenshotLoading ? "hidden" : ""}`}
-                onLoad={() => setScreenshotLoading(false)}
-                onError={() => {
-                  setScreenshotLoading(false);
-                  setScreenshotError(true);
-                }}
-              />
-            )}
-            <Button
-              onClick={closeScreenshot}
-              variant="outline"
-              size="sm"
-              className="mt-2"
-            >
-              Close
-            </Button>
-          </div>
-        </div>
+        <ScreenshotLightbox url={screenshotUrl} onClose={() => setScreenshotUrl(null)} />
       )}
 
       {/* Reject Modal */}
@@ -180,7 +104,7 @@ export default function PendingPayments() {
       )}
 
       <main className="max-w-lg mx-auto p-4 space-y-3">
-        {payments.length === 0 ? (
+        {items.length === 0 ? (
           <Card>
             <p className="text-slate-500 text-center py-4">
               No pending payments to verify.
@@ -190,7 +114,7 @@ export default function PendingPayments() {
           (() => {
             // Group payments by month, sorted newest first
             const grouped = new Map<string, PendingPayment[]>();
-            const sorted = [...payments].sort((a, b) => b.year - a.year || b.month - a.month);
+            const sorted = [...items].sort((a, b) => b.year - a.year || b.month - a.month);
             for (const p of sorted) {
               const key = `${p.year}-${p.month}`;
               const list = grouped.get(key) || [];

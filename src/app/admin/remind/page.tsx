@@ -1,68 +1,43 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import NavBar from "@/components/NavBar";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Toast from "@/components/ui/Toast";
+import { useToast } from "@/hooks/useToast";
+import { apiGetFlats, apiGetMonths, apiGetPayments, apiGetConfig, apiGetReminders, apiTrackReminder } from "@/lib/api-client";
+import { formatReminderMessage, formatRelativeDate, getLatestReminder } from "@/lib/reminder-helpers";
 import { generateWhatsAppLink } from "@/lib/whatsapp";
 import { MONTH_NAMES } from "@/lib/constants";
 import type { FlatData, MonthData, PaymentData, ReminderData } from "@/lib/types";
 
-function formatReminderMessage(
-  flatNumber: string,
-  amount: number,
-  monthLabel: string,
-  webappUrl: string | null
-): string {
-  let msg = `Hi, this is a reminder that Flat ${flatNumber}'s maintenance of \u20B9${amount.toLocaleString("en-IN")} for ${monthLabel} is overdue. Please pay at the earliest.`;
-  if (webappUrl) {
-    msg += `\n\nPlease update your payment at: ${webappUrl}`;
-  }
-  msg += "\n\nThank you.";
-  return msg;
+export default function RemindDefaultersPage() {
+  return (
+    <Suspense fallback={<LoadingSpinner fullPage />}>
+      <RemindDefaulters />
+    </Suspense>
+  );
 }
 
-function formatRelativeDate(isoString: string): string {
-  const date = new Date(isoString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return "just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
-
-  return date.toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-  });
-}
-
-export default function RemindDefaulters() {
+function RemindDefaulters() {
+  const searchParams = useSearchParams();
+  const urlMonthId = searchParams.get("monthId");
   const [defaulters, setDefaulters] = useState<
     { flat: FlatData; message: string; whatsappLink: string | null }[]
   >([]);
   const [loading, setLoading] = useState(true);
   const [currentMonth, setCurrentMonth] = useState<MonthData | null>(null);
-  const [toast, setToast] = useState<{
-    message: string;
-    type: "success" | "error" | "info";
-  } | null>(null);
+  const { toast, showToast, clearToast } = useToast();
   const [reminders, setReminders] = useState<ReminderData[]>([]);
   const [trackingIds, setTrackingIds] = useState<Set<number>>(new Set());
 
   const loadReminders = useCallback(async (monthId: number) => {
     try {
-      const res = await fetch(`/api/reminders?monthId=${monthId}`);
-      if (res.ok) {
-        const data: ReminderData[] = await res.json();
-        setReminders(data);
-      }
+      const data = await apiGetReminders(monthId);
+      setReminders(data);
     } catch {
       // Silently fail -- reminders are supplementary info
     }
@@ -75,32 +50,31 @@ export default function RemindDefaulters() {
 
   async function loadData() {
     try {
-      const [flatsRes, monthsRes, paymentsRes, configRes] = await Promise.all([
-        fetch("/api/flats"),
-        fetch("/api/months"),
-        fetch("/api/payments"),
-        fetch("/api/config"),
+      const [flatsData, monthsData, paymentsData, configData] = await Promise.all([
+        apiGetFlats(),
+        apiGetMonths(),
+        apiGetPayments(),
+        apiGetConfig().catch(() => ({} as Record<string, string | undefined>)),
       ]);
 
-      const flatsData: FlatData[] = await flatsRes.json();
-      const monthsData: MonthData[] = await monthsRes.json();
-      const paymentsData: PaymentData[] = await paymentsRes.json();
+      const webappUrl = configData.webapp_url || null;
 
-      let webappUrl: string | null = null;
-      if (configRes.ok) {
-        const configData: Record<string, string> = await configRes.json();
-        webappUrl = configData.webapp_url || null;
+      // Use URL monthId if provided, otherwise fall back to first open month
+      let targetMonth: MonthData | undefined;
+      if (urlMonthId) {
+        targetMonth = monthsData.find((m: MonthData) => m.id === parseInt(urlMonthId));
       }
+      if (!targetMonth) {
+        targetMonth = monthsData.find((m) => m.status === "open");
+      }
+      setCurrentMonth(targetMonth || null);
 
-      const openMonth = monthsData.find((m) => m.status === "open");
-      setCurrentMonth(openMonth || null);
-
-      if (openMonth) {
-        const monthLabel = `${MONTH_NAMES[openMonth.month - 1]} ${openMonth.year}`;
+      if (targetMonth) {
+        const monthLabel = `${MONTH_NAMES[targetMonth.month - 1]} ${targetMonth.year}`;
         const paidFlatIds = paymentsData
           .filter(
             (p) =>
-              p.monthId === openMonth.id && p.status !== "rejected"
+              p.monthId === targetMonth.id && p.status !== "rejected"
           )
           .map((p) => p.flatId);
 
@@ -114,44 +88,37 @@ export default function RemindDefaulters() {
               flat.flatNumber,
               flat.maintenanceAmount,
               monthLabel,
-              webappUrl
+              webappUrl,
             );
             return {
               flat,
               message,
-              whatsappLink: flat.phone
-                ? generateWhatsAppLink(flat.phone, message)
+              whatsappLink: flat.ownerPhone
+                ? generateWhatsAppLink(flat.ownerPhone, message)
                 : null,
             };
           })
         );
 
         // Load reminder history for this month
-        await loadReminders(openMonth.id);
+        await loadReminders(targetMonth.id);
       }
     } catch {
-      setToast({ message: "Failed to load data", type: "error" });
+      showToast("Failed to load data", "error");
     } finally {
       setLoading(false);
     }
   }
 
-  async function trackReminder(flatId: number) {
+  async function trackReminderForFlat(flatId: number) {
     if (!currentMonth) return;
 
     setTrackingIds((prev) => new Set(prev).add(flatId));
 
     try {
-      const res = await fetch("/api/reminders", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ flatId, monthId: currentMonth.id }),
-      });
-
-      if (res.ok) {
-        // Refresh reminders list to show the new entry
-        await loadReminders(currentMonth.id);
-      }
+      await apiTrackReminder(flatId, currentMonth.id);
+      // Refresh reminders list to show the new entry
+      await loadReminders(currentMonth.id);
     } catch {
       // Silently fail -- the primary action (copy / whatsapp) already succeeded
     } finally {
@@ -165,18 +132,13 @@ export default function RemindDefaulters() {
 
   const copyMessage = (message: string, flatId: number) => {
     navigator.clipboard.writeText(message);
-    setToast({ message: "Message copied!", type: "info" });
-    trackReminder(flatId);
+    showToast("Message copied!", "success");
+    trackReminderForFlat(flatId);
   };
 
   const handleWhatsApp = (flatId: number) => {
-    trackReminder(flatId);
+    trackReminderForFlat(flatId);
   };
-
-  function getLatestReminder(flatId: number): ReminderData | null {
-    // reminders are ordered by sentAt desc from the API
-    return reminders.find((r) => r.flatId === flatId) || null;
-  }
 
   if (loading) {
     return <LoadingSpinner fullPage />;
@@ -188,10 +150,10 @@ export default function RemindDefaulters() {
         <Toast
           message={toast.message}
           type={toast.type}
-          onClose={() => setToast(null)}
+          onClose={clearToast}
         />
       )}
-      <NavBar title="Remind Defaulters" backHref="/admin" />
+      <NavBar title="Remind Defaulters" backHref="/admin/months" />
 
       <main className="max-w-lg mx-auto p-4 space-y-4">
         {currentMonth && (
@@ -216,7 +178,7 @@ export default function RemindDefaulters() {
           </Card>
         ) : (
           defaulters.map(({ flat, message, whatsappLink }) => {
-            const lastReminder = getLatestReminder(flat.id);
+            const lastReminder = getLatestReminder(reminders, flat.id);
             const isTracking = trackingIds.has(flat.id);
 
             return (

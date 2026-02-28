@@ -4,15 +4,17 @@ import { useEffect, useState, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import NavBar from "@/components/NavBar";
 import FlatGrid from "@/components/FlatGrid";
-import type { FlatStatus } from "@/components/FlatGrid";
 import Toast from "@/components/ui/Toast";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
-import MonthSelector from "@/components/MonthSelector";
 import FlatPaymentModal from "@/components/FlatPaymentModal";
-import { useAppConfig } from "@/hooks/useAppConfig";
+import { useSession } from "@/contexts/SessionContext";
+import { useToast } from "@/hooks/useToast";
+import { apiGetFlats, apiGetMonths, apiGetPayments, apiGetReminders, apiTrackReminder } from "@/lib/api-client";
+import { buildFlatGrid, computeMonthStats } from "@/lib/dashboard-helpers";
 import { findCurrentMonth } from "@/lib/types";
-import type { MonthData, PaymentData, FlatData, ReminderData, ToastState } from "@/lib/types";
-import type { PaymentStatus } from "@/lib/constants";
+import type { FlatStatus } from "@/lib/types";
+import type { MonthData, PaymentData, FlatData, ReminderData } from "@/lib/types";
+import { MONTH_NAMES } from "@/lib/constants";
 
 export default function AdminDashboardPage() {
   return (
@@ -27,34 +29,41 @@ function AdminDashboard() {
   const searchParams = useSearchParams();
   const urlMonthId = searchParams.get("monthId");
 
+  // No monthId → go to month management as default landing
+  useEffect(() => {
+    if (!urlMonthId) {
+      router.replace("/admin/months");
+    }
+  }, [urlMonthId, router]);
+
   const [allFlats, setAllFlats] = useState<FlatData[]>([]);
   const [allMonths, setAllMonths] = useState<MonthData[]>([]);
   const [payments, setPayments] = useState<PaymentData[]>([]);
   const [selectedMonth, setSelectedMonth] = useState<MonthData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [toast, setToast] = useState<ToastState>(null);
+  const { toast, showToast, clearToast } = useToast();
 
   // Flat history modal
   const [modalFlat, setModalFlat] = useState<FlatStatus | null>(null);
+  const [modalFlatDetails, setModalFlatDetails] = useState<FlatData | null>(null);
   const [flatPayments, setFlatPayments] = useState<PaymentData[]>([]);
   const [loadingFlatHistory, setLoadingFlatHistory] = useState(false);
 
   // Reminders
   const [reminders, setReminders] = useState<ReminderData[]>([]);
   const [remindingFlatId, setRemindingFlatId] = useState<number | null>(null);
-  const { securityName, adminName } = useAppConfig();
+  const { config: { securityName, adminName } } = useSession();
 
   const loadData = useCallback(async () => {
     try {
-      const [flatsRes, monthsRes, paymentsRes] = await Promise.all([
-        fetch("/api/flats"),
-        fetch("/api/months"),
-        fetch("/api/payments"),
+      const [flatsData, monthsData, paymentsData] = await Promise.all([
+        apiGetFlats(),
+        apiGetMonths(),
+        apiGetPayments(),
       ]);
-      setAllFlats(await flatsRes.json());
-      const monthsData = await monthsRes.json();
+      setAllFlats(flatsData);
       setAllMonths(monthsData);
-      setPayments(await paymentsRes.json());
+      setPayments(paymentsData);
 
       if (!selectedMonth && monthsData.length > 0) {
         // If URL has monthId, use that; otherwise default to current calendar month
@@ -68,11 +77,11 @@ function AdminDashboard() {
         setSelectedMonth(findCurrentMonth(monthsData));
       }
     } catch {
-      setToast({ message: "Failed to load data", type: "error" });
+      showToast("Failed to load data", "error");
     } finally {
       setLoading(false);
     }
-  }, [selectedMonth, urlMonthId]);
+  }, [selectedMonth, urlMonthId, showToast]);
 
   useEffect(() => {
     loadData();
@@ -81,8 +90,8 @@ function AdminDashboard() {
   const loadReminders = useCallback(async () => {
     if (!selectedMonth) return;
     try {
-      const res = await fetch(`/api/reminders?monthId=${selectedMonth.id}`);
-      if (res.ok) setReminders(await res.json());
+      const data = await apiGetReminders(selectedMonth.id);
+      setReminders(data);
     } catch { /* silently fail */ }
   }, [selectedMonth]);
 
@@ -92,16 +101,14 @@ function AdminDashboard() {
 
   const handleFlatClick = async (flat: FlatStatus) => {
     setModalFlat(flat);
+    setModalFlatDetails(allFlats.find((f) => f.id === flat.flatId) || null);
     setLoadingFlatHistory(true);
     setFlatPayments([]);
     try {
-      const res = await fetch("/api/payments");
-      if (res.ok) {
-        const allPayments: PaymentData[] = await res.json();
-        setFlatPayments(allPayments.filter((p) => p.flatId === flat.flatId));
-      }
+      const allPayments = await apiGetPayments();
+      setFlatPayments(allPayments.filter((p) => p.flatId === flat.flatId));
     } catch {
-      setToast({ message: "Failed to load payment history", type: "error" });
+      showToast("Failed to load payment history", "error");
     } finally {
       setLoadingFlatHistory(false);
     }
@@ -109,6 +116,7 @@ function AdminDashboard() {
 
   const closeModal = () => {
     setModalFlat(null);
+    setModalFlatDetails(null);
     setFlatPayments([]);
   };
 
@@ -116,21 +124,20 @@ function AdminDashboard() {
     if (!selectedMonth) return;
     setRemindingFlatId(flatId);
     try {
-      const res = await fetch("/api/reminders", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ flatId, monthId: selectedMonth.id }),
-      });
-      if (res.ok) {
-        setToast({ message: "Reminder recorded!", type: "success" });
-        loadReminders();
-      }
+      await apiTrackReminder(flatId, selectedMonth.id);
+      showToast("Reminder recorded!", "success");
+      loadReminders();
     } catch {
-      setToast({ message: "Failed to record reminder", type: "error" });
+      showToast("Failed to record reminder", "error");
     } finally {
       setRemindingFlatId(null);
     }
   };
+
+  // Redirecting to months page
+  if (!urlMonthId) {
+    return <LoadingSpinner fullPage />;
+  }
 
   if (loading) {
     return <LoadingSpinner fullPage />;
@@ -140,81 +147,30 @@ function AdminDashboard() {
     (p) => selectedMonth && p.monthId === selectedMonth.id
   );
 
-  const gridData: FlatStatus[] = allFlats.map((flat) => {
-    const payment = monthPayments.find((p) => p.flatId === flat.id);
-    const isOverdue = selectedMonth
-      ? selectedMonth.status === "open" && new Date().getDate() > selectedMonth.dueDateDay
-      : false;
-    const lastReminder = reminders.find((r) => r.flatId === flat.id);
-    return {
-      flatNumber: flat.flatNumber,
-      flatId: flat.id,
-      amount: flat.maintenanceAmount,
-      status: payment
-        ? (payment.status as PaymentStatus)
-        : isOverdue
-          ? ("overdue" as const)
-          : ("not_paid" as const),
-      paymentId: payment?.id,
-      lastRemindedAt: lastReminder?.sentAt || null,
-    };
-  });
+  const gridData = buildFlatGrid(allFlats, monthPayments, reminders, selectedMonth);
 
-  const paidCount = monthPayments.filter((p) => p.status === "paid").length;
-  const pendingVerify = monthPayments.filter((p) => p.status === "pending_verification").length;
-  const pendingCollect = monthPayments.filter((p) => p.status === "pending_collection").length;
-  const totalCollected = monthPayments
-    .filter((p) => p.status === "paid")
-    .reduce((sum, p) => sum + p.amount, 0);
-  const cashToCollect = monthPayments
-    .filter((p) => p.status === "pending_collection")
-    .reduce((sum, p) => sum + p.amount, 0);
-  const totalExpected = allFlats.reduce((sum, f) => sum + f.maintenanceAmount, 0);
-  const defaulterCount = allFlats.length - monthPayments.filter((p) => p.status !== "rejected").length;
-  const defaulterAmount = allFlats
-    .filter((flat) => !monthPayments.find((p) => p.flatId === flat.id && p.status !== "rejected"))
-    .reduce((sum, f) => sum + f.maintenanceAmount, 0);
+  const {
+    paidCount,
+    pendingVerify,
+    pendingCollect,
+    totalCollected,
+    cashToCollect,
+    totalExpected,
+    defaulterCount,
+    defaulterAmount,
+  } = computeMonthStats(monthPayments, allFlats);
 
   return (
     <div className="min-h-screen bg-slate-50">
       {toast && (
-        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
+        <Toast message={toast.message} type={toast.type} onClose={clearToast} />
       )}
       <NavBar
-        title="Laurel Residency"
-        subtitle="Admin"
-        actions={
-          <>
-            <button
-              onClick={() => router.push("/admin/months")}
-              className="p-2 hover:bg-indigo-800 rounded-lg transition-colors"
-              title="Months"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-            </button>
-            <button
-              onClick={() => router.push("/admin/settings")}
-              className="p-2 hover:bg-indigo-800 rounded-lg transition-colors"
-              title="Settings"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            </button>
-          </>
-        }
+        title={selectedMonth ? `${selectedMonth.month && MONTH_NAMES[selectedMonth.month - 1]} ${selectedMonth.year}` : "Admin"}
+        backHref="/admin/months"
       />
 
       <main className="max-w-lg mx-auto p-4 space-y-4">
-        {/* Month Selector with Year Grouping */}
-        <MonthSelector
-          months={allMonths}
-          selectedMonth={selectedMonth}
-          onSelectMonth={setSelectedMonth}
-        />
 
         {selectedMonth && (
           <>
@@ -254,7 +210,7 @@ function AdminDashboard() {
               )}
               {selectedMonth.status === "open" && defaulterCount > 0 && (
                 <button
-                  onClick={() => router.push("/admin/remind")}
+                  onClick={() => router.push(`/admin/remind?monthId=${selectedMonth.id}`)}
                   className="flex-1 min-w-[30%] bg-rose-50 rounded-xl py-2 px-1 hover:bg-rose-100 transition-colors text-center"
                 >
                   <div className="text-lg font-bold text-rose-700">{defaulterCount}</div>
@@ -273,6 +229,7 @@ function AdminDashboard() {
       {/* Flat Payment History Modal */}
       <FlatPaymentModal
         flat={modalFlat}
+        flatDetails={modalFlatDetails}
         onClose={closeModal}
         payments={flatPayments}
         loadingHistory={loadingFlatHistory}

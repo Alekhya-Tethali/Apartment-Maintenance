@@ -1,60 +1,38 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useState } from "react";
 import NavBar from "@/components/NavBar";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Toast from "@/components/ui/Toast";
+import { useToast } from "@/hooks/useToast";
+import { useApiQuery } from "@/hooks/useApiQuery";
+import { useSession } from "@/contexts/SessionContext";
+import { apiGetPendingCash, apiCollectPayment } from "@/lib/api-client";
 import { MONTH_NAMES } from "@/lib/constants";
-import { useAppConfig } from "@/hooks/useAppConfig";
-import type { PendingCash, ToastState } from "@/lib/types";
 
 export default function ReconcileCash() {
-  const [payments, setPayments] = useState<PendingCash[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: payments, loading, refetch } = useApiQuery(apiGetPendingCash);
   const [collectingId, setCollectingId] = useState<number | null>(null);
-  const [toast, setToast] = useState<ToastState>(null);
-  const { securityName } = useAppConfig();
-
-  const loadData = useCallback(async () => {
-    try {
-      const res = await fetch("/api/payments?status=pending_collection");
-      setPayments(await res.json());
-    } catch {
-      setToast({ message: "Failed to load", type: "error" });
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  const { toast, showToast, clearToast } = useToast();
+  const { config: { securityName } } = useSession();
 
   const handleCollect = async (paymentId: number) => {
     setCollectingId(paymentId);
     try {
-      const res = await fetch("/api/payments/collect", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ paymentId }),
-      });
-      if (res.ok) {
-        setToast({ message: "Cash collected!", type: "success" });
-        loadData();
-      } else {
-        const data = await res.json();
-        setToast({ message: data.error, type: "error" });
-      }
-    } catch {
-      setToast({ message: "Network error", type: "error" });
+      await apiCollectPayment(paymentId);
+      showToast("Cash collected!", "success");
+      refetch();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Network error", "error");
     } finally {
       setCollectingId(null);
     }
   };
 
-  const totalAmount = payments.reduce((sum, p) => sum + p.amount, 0);
+  const items = payments ?? [];
+  const totalAmount = items.reduce((sum, p) => sum + p.amount, 0);
 
   if (loading) {
     return <LoadingSpinner fullPage />;
@@ -63,32 +41,32 @@ export default function ReconcileCash() {
   return (
     <div className="min-h-screen bg-slate-50">
       {toast && (
-        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
+        <Toast message={toast.message} type={toast.type} onClose={clearToast} />
       )}
-      <NavBar title={`Collect from ${securityName || "Security"}`} backHref="/admin" />
+      <NavBar title={`Collect from ${securityName || "Security"}`} backHref="/admin/months" />
 
       <main className="max-w-lg mx-auto p-4 space-y-4">
-        {payments.length > 0 && (
+        {items.length > 0 && (
           <Card className="bg-orange-50 border-orange-200">
             <div className="text-center">
               <div className="text-3xl font-bold text-orange-700">
                 ₹{totalAmount.toLocaleString("en-IN")}
               </div>
               <div className="text-sm text-orange-600">
-                Total to collect from {securityName || "security"} ({payments.length} flats)
+                Total to collect from {securityName || "security"} ({items.length} flats)
               </div>
             </div>
           </Card>
         )}
 
-        {payments.length === 0 ? (
+        {items.length === 0 ? (
           <Card>
             <p className="text-slate-500 text-center py-4">
               No cash pending collection.
             </p>
           </Card>
         ) : (
-          payments.map((p) => (
+          items.map((p) => (
             <Card key={p.id}>
               <div className="flex justify-between items-center">
                 <div>

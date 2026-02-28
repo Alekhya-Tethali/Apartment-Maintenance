@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Button from "@/components/ui/Button";
 import PinInput from "@/components/ui/PinInput";
 import Toast from "@/components/ui/Toast";
+import { apiLogin, ApiError } from "@/lib/api-client";
 
 type LoginMode = "resident" | "security" | "admin";
 
@@ -52,40 +53,24 @@ export default function LoginPage() {
     setError("");
 
     try {
-      const body: Record<string, string> = { role: currentMode };
-      if (currentMode === "resident") {
-        if (!currentFlat) {
-          setError("Please select your flat first");
-          setLoading(false);
-          return;
-        }
-        body.flatNumber = currentFlat;
-        body.pin = pinOrPassword;
-      } else if (currentMode === "security") {
-        body.pin = pinOrPassword;
-      } else {
-        body.password = pinOrPassword;
-      }
-
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error || "Login failed");
+      if (currentMode === "resident" && !currentFlat) {
+        setError("Please select your flat first");
         setLoading(false);
         return;
       }
 
+      await apiLogin({
+        role: currentMode,
+        ...(currentMode === "resident" && { flatNumber: currentFlat, pin: pinOrPassword }),
+        ...(currentMode === "security" && { pin: pinOrPassword }),
+        ...(currentMode === "admin" && { password: pinOrPassword }),
+      });
+
       if (currentMode === "resident") router.push("/resident");
       else if (currentMode === "security") router.push("/security");
-      else router.push("/admin");
-    } catch {
-      setError("Network error. Please try again.");
+      else router.push("/admin/months");
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Network error. Please try again.");
       setLoading(false);
     }
   }, [router]);

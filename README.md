@@ -1,6 +1,6 @@
 # Apartment Maintenance Tracker
 
-A mobile-first web application for tracking apartment maintenance payments across 12 flats. Supports multiple payment modes (GPay, PhonePe, Cash), role-based access for residents, security staff, and admin, with encrypted screenshot storage and automated Telegram reminders.
+A mobile-first web application for tracking apartment maintenance payments across 12 flats. Supports multiple payment modes (UPI — GPay, PhonePe, Other — and Cash), role-based access for residents, security staff, and admin, with encrypted screenshot storage, automated Telegram reminders, and weekly email backups.
 
 ## Table of Contents
 
@@ -25,7 +25,7 @@ A mobile-first web application for tracking apartment maintenance payments acros
 
 ### Core Features
 - **Self-service payment reporting** — Residents mark their payment as done by selecting payment mode and uploading a screenshot
-- **Three payment modes** — GPay, PhonePe, and Cash to Security
+- **Flexible payment modes** — Cash or UPI (GPay, PhonePe, or Other with custom input)
 - **Screenshot verification** — Digital payments require a screenshot upload; admin verifies before marking as paid
 - **3-step cash verification** — Resident reports → Security confirms in person → Admin collects from security
 - **Per-flat maintenance amounts** — Admin configures different amounts for each flat
@@ -35,27 +35,30 @@ A mobile-first web application for tracking apartment maintenance payments acros
 - **Color-coded 12-flat grid** — Emerald (paid), Amber (pending verification), Orange (cash to collect), Rose (unpaid/overdue)
 - **Smart summary statistics** — Total collected, expected (open months only), pending approvals, cash to collect, defaulter count with amount
 - **Payment approval/rejection** — View encrypted screenshots, approve or reject with reason
-- **Payment detail view** — Click any payment to see full details, screenshot, dates, admin notes; admin can approve, reject, or override status
+- **Payment detail view** — Click any payment to see full details, screenshot, dates, admin notes with owner/tenant name display; admin can approve, reject, edit, or override status
+- **Edit payment** — Admin can edit any payment field (amount, mode, date, note) while month is open
 - **Admin status override** — Force-change any payment status (e.g., mark as paid when resident couldn't submit on the app)
-- **Record payment on behalf** — Admin can create payment records for residents who paid outside the app
+- **Record payment on behalf** — Admin can create payment records for residents who paid outside the app (two-level Cash/UPI mode selector)
 - **Cash reconciliation** — See total owed by security, mark individual payments as collected
-- **Month management** — Open new months, close completed ones; PDF report auto-sent to Telegram on close
+- **Month management** — Open new months, close completed ones; PDF report auto-sent to Telegram on close; admin landing page
+- **Manual Telegram trigger** — Bell icon on open months to send defaulter summary to Telegram on demand
 - **PDF reports** — Auto-generated on month close + manual download from months page
-- **Flat configuration** — Set maintenance amount, PIN, and phone number per flat
+- **Flat configuration** — Set maintenance amount, PIN, phone number, owner/tenant info per flat; tenant name shown on tiles
 - **Remind defaulters** — Pre-formatted WhatsApp messages with one-tap send for each defaulter
 - **Historical view** — Track payment patterns across all months with year-grouped calendar navigation
-- **Settings organized** — Admin, Security, Telegram, and App sections clearly separated
+- **Settings organized** — Admin, Security, Telegram, App, and Backup sections clearly separated
 
 ### Security Staff View
 - **All-flat status grid** — See who has paid and who hasn't, with month navigation
 - **Cash confirmation** — Confirm cash receipts when resident is physically present
-- **Payment history** — Click any flat to see full payment history; tap a payment for details (read-only)
+- **Payment history** — Click any flat to see full payment history with owner/tenant names; tap a payment for details (read-only)
+- **Request updates** — Security can request tenant info or amount changes for admin review
 - **Follow-up list** — See pending flats to remind, with cooldown tracking
 - **Month navigation** — Same MonthSelector as admin with year tabs and chronological months
 
 ### Resident View
 - **Smart dashboard** — Current calendar month prioritized, amount due, due date, with past months below
-- **One-tap payment flow** — Select mode → upload screenshot (if digital) → done
+- **Two-step payment flow** — Select Cash or UPI → if UPI, pick GPay/PhonePe/Other → upload screenshot → done
 - **Payment history** — See past months with late payment indicators (clock icon + days late)
 - **Payment detail** — Tap any past payment to see full details (read-only)
 - **Rejection handling** — If admin rejects a screenshot, resident can resubmit
@@ -68,9 +71,16 @@ A mobile-first web application for tracking apartment maintenance payments acros
 
 ### Automation
 - **Daily cron job** — Runs at 8 AM IST
+  - **1st of month**: Auto-opens new month + Telegram notification to admin
   - **11th of month**: Telegram notification to security with defaulter list
   - **20th of month**: Telegram notification to admin with defaulter list + ready-to-copy WhatsApp messages
   - **All flats paid**: Telegram notification to admin with collection summary (dynamic security name)
+- **Weekly database backup** — Runs every Sunday at 8:30 AM IST
+  - Dumps all tables (flats, payments, months, config, reminders, requests) as JSON
+  - Sends as email attachment via Gmail SMTP (App Password)
+  - Excludes sensitive data (password hashes, tokens, encrypted phone numbers)
+  - Configurable backup email in Admin Settings
+- **Manual Telegram trigger** — Bell icon on months page to send defaulter summary on demand
 - **Consolidation reminder** — When all flats have submitted, admin gets a breakdown of digital vs. cash amounts
 - **Real-time notifications** — Admin gets Telegram alerts when new payments are submitted
 - **PDF on month close** — Auto-generated PDF report sent to admin via Telegram
@@ -92,6 +102,7 @@ A mobile-first web application for tracking apartment maintenance payments acros
 | Hashing | bcryptjs | PIN and password hashing (12 salt rounds) |
 | Validation | Zod | Runtime input validation for all API routes |
 | Notifications | Telegram Bot API | Free, reliable admin/security alerts |
+| Email | Nodemailer (Gmail SMTP) | Weekly backup delivery, zero third-party cost |
 | Hosting | Vercel (Hobby) | Free tier: 150K invocations, 100GB bandwidth, cron jobs |
 
 ---
@@ -151,9 +162,9 @@ A mobile-first web application for tracking apartment maintenance payments acros
 
 ## Payment Flows
 
-### Digital Payment (GPay / PhonePe)
+### UPI Payment (GPay / PhonePe / Other)
 ```
-Resident selects GPay/PhonePe
+Resident selects UPI → picks GPay, PhonePe, or Other
   → Uploads payment screenshot
   → Status: PENDING VERIFICATION (Yellow)
   → Admin views screenshot, approves
@@ -186,6 +197,8 @@ Resident selects "Cash to Security"
 | 11th of month | Security | Telegram | List of defaulting flats |
 | 20th of month | Admin | Telegram | Defaulter list + WhatsApp messages |
 | Manual reminder | Defaulters | WhatsApp | Pre-formatted message via deep link |
+| Manual trigger (bell icon) | Admin | Telegram | Defaulter summary for selected month |
+| Weekly backup (Sunday) | Admin | Email | JSON database dump as attachment |
 
 ---
 
@@ -265,7 +278,13 @@ src/
 │       │   └── public/route.ts               # GET: Public config (display names)
 │       ├── reminders/route.ts                # GET/POST: Reminder tracking
 │       ├── remind/route.ts                   # POST: Generate WhatsApp reminders
-│       └── cron/notifications/route.ts       # GET: Daily smart cron handler
+│       ├── requests/
+│       │   ├── route.ts                      # GET/POST: Update requests (security)
+│       │   └── review/route.ts               # POST: Admin reviews requests
+│       ├── notifications/trigger/route.ts    # POST: Manual Telegram notification
+│       └── cron/
+│           ├── notifications/route.ts        # GET: Daily smart cron handler
+│           └── backup/route.ts               # GET: Weekly email backup cron
 │
 ├── db/
 │   ├── schema.ts                             # Drizzle table definitions
@@ -278,6 +297,7 @@ src/
 │   ├── hash.ts                               # bcryptjs hash/verify
 │   ├── rate-limit.ts                         # DB-backed login rate limiting
 │   ├── telegram.ts                           # Telegram Bot API helpers (messages + documents)
+│   ├── email.ts                              # Gmail SMTP email helper (Nodemailer)
 │   ├── whatsapp.ts                           # WhatsApp deep link generator
 │   ├── constants.ts                          # Enums, role-aware status labels + colors
 │   ├── theme.ts                              # Centralized color tokens for all components
@@ -387,12 +407,18 @@ Open http://localhost:3000
 | Column | Type | Description |
 |--------|------|-------------|
 | id | INTEGER (PK) | Auto-increment ID |
-| flat_number | TEXT (UNIQUE) | e.g., "G1", "F2", "S1" |
+| flat_number | TEXT (UNIQUE) | e.g., "101", "202", "403" |
 | maintenance_amount | REAL | Monthly amount in INR |
 | pin_hash | TEXT | bcrypt hash of 4-digit PIN |
-| phone_encrypted | TEXT | AES-256-GCM encrypted phone number |
-| phone_iv | TEXT | Initialization vector for decryption |
-| phone_tag | TEXT | Auth tag for decryption |
+| owner_phone_encrypted | TEXT | AES-256-GCM encrypted owner phone |
+| owner_phone_iv | TEXT | Initialization vector for decryption |
+| owner_phone_tag | TEXT | Auth tag for decryption |
+| owner_name | TEXT | Owner display name |
+| is_rented | INTEGER | 0 = owner-occupied, 1 = rented |
+| tenant_name | TEXT | Tenant name (if rented) |
+| tenant_phone_encrypted | TEXT | AES-256-GCM encrypted tenant phone |
+| tenant_phone_iv | TEXT | IV for tenant phone decryption |
+| tenant_phone_tag | TEXT | Auth tag for tenant phone decryption |
 
 ### payments
 | Column | Type | Description |
@@ -401,7 +427,7 @@ Open http://localhost:3000
 | flat_id | INTEGER (FK) | References flats.id |
 | month_id | INTEGER (FK) | References months.id |
 | amount | REAL | Payment amount |
-| payment_mode | TEXT | "gpay", "phonepe", or "cash" |
+| payment_mode | TEXT | "gpay", "phonepe", "upi_other", or "cash" |
 | status | TEXT | See Payment Status Flow |
 | screenshot_blob_url | TEXT | Encrypted file URL in Vercel Blob |
 | screenshot_iv | TEXT | IV for screenshot decryption |
@@ -427,6 +453,36 @@ Open http://localhost:3000
 |--------|------|-------------|
 | key | TEXT (PK) | Config key name |
 | value | TEXT | Config value |
+
+### reminders
+| Column | Type | Description |
+|--------|------|-------------|
+| id | INTEGER (PK) | Auto-increment ID |
+| flat_id | INTEGER (FK) | References flats.id |
+| month_id | INTEGER (FK) | References months.id |
+| sent_by | TEXT | Who sent the reminder |
+| sent_at | TEXT | ISO timestamp |
+
+### amount_overrides
+| Column | Type | Description |
+|--------|------|-------------|
+| id | INTEGER (PK) | Auto-increment ID |
+| flat_id | INTEGER (FK) | References flats.id |
+| month_id | INTEGER (FK) | References months.id |
+| amount | REAL | Override amount for this flat/month |
+
+### update_requests
+| Column | Type | Description |
+|--------|------|-------------|
+| id | INTEGER (PK) | Auto-increment ID |
+| flat_id | INTEGER (FK) | References flats.id |
+| request_type | TEXT | "tenant_info" or "amount" |
+| request_data | TEXT | JSON with requested changes |
+| status | TEXT | "pending", "approved", "rejected" |
+| requested_by | TEXT | Who made the request |
+| requested_at | TEXT | ISO timestamp |
+| reviewed_at | TEXT | When admin reviewed |
+| admin_note | TEXT | Admin's review note |
 
 ### login_attempts
 | Column | Type | Description |
@@ -456,7 +512,8 @@ Open http://localhost:3000
 | POST | `/api/payments/reject` | Admin | Reject with reason |
 | POST | `/api/payments/security-confirm` | Security | Confirm cash receipt |
 | POST | `/api/payments/collect` | Admin | Mark cash as collected |
-| PATCH | `/api/payments/admin-update` | Admin | Override payment status |
+| PATCH | `/api/payments/admin-update` | Admin | Override status or edit payment fields (amount, mode, date) |
+| DELETE | `/api/payments/admin-update` | Admin | Delete a payment |
 | POST | `/api/payments/admin-update` | Admin | Create payment on behalf of resident |
 | POST | `/api/payments/upload-screenshot` | Resident | Upload encrypted screenshot |
 | GET | `/api/screenshots?paymentId=N` | Admin | Decrypt and serve screenshot |
@@ -484,10 +541,19 @@ Open http://localhost:3000
 | GET | `/api/reminders?monthId=N` | Any | List reminders for a month |
 | POST | `/api/reminders` | Admin/Security | Record a reminder sent to a flat |
 
+### Notifications & Requests
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| POST | `/api/notifications/trigger` | Admin | Manually send defaulter summary to Telegram |
+| GET | `/api/requests` | Admin | List update requests |
+| POST | `/api/requests` | Security | Submit update request (tenant/amount) |
+| POST | `/api/requests/review` | Admin | Approve or reject request |
+
 ### Cron
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | GET | `/api/cron/notifications` | CRON_SECRET | Daily notification handler |
+| GET | `/api/cron/backup` | CRON_SECRET | Weekly database backup via email |
 
 ---
 
@@ -515,11 +581,16 @@ npm run db:seed:clear
 4. For screenshot storage: Storage tab → Create → Blob (auto-adds BLOB_READ_WRITE_TOKEN)
 5. Deploy
 
-### Cron Job
-The `vercel.json` configures a daily cron at `30 2 * * *` (8:00 AM IST):
-- 11th: Notifies security staff with defaulter list
-- 20th: Notifies admin with defaulters + WhatsApp messages
-- Any day: Notifies admin when all flats have paid
+### Cron Jobs
+The `vercel.json` configures two cron jobs:
+1. **Daily notifications** (`30 2 * * *` = 8:00 AM IST):
+   - 1st: Auto-opens new month, notifies admin
+   - 11th: Notifies security staff with defaulter list
+   - 20th: Notifies admin with defaulters + WhatsApp messages
+   - Any day: Notifies admin when all flats have paid
+2. **Weekly backup** (`0 3 * * 0` = 8:30 AM IST every Sunday):
+   - Dumps all database tables as JSON
+   - Sends to configured backup email via Gmail SMTP
 
 ---
 
@@ -535,7 +606,11 @@ The `vercel.json` configures a daily cron at `30 2 * * *` (8:00 AM IST):
    - Message @BotFather → /newbot → copy token
    - Message your bot → visit `https://api.telegram.org/bot<TOKEN>/getUpdates` → find chat_id
    - Enter token and chat IDs in Settings
-8. Share the app URL in the apartment WhatsApp group
+8. **Set up weekly backup** (recommended):
+   - Enable 2-Step Verification on your Gmail account
+   - Go to myaccount.google.com → Security → App Passwords → generate one
+   - Enter email address and App Password in Settings → Weekly Backup
+9. Share the app URL in the apartment WhatsApp group
 
 ---
 

@@ -5,19 +5,18 @@ import NavBar from "@/components/NavBar";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import FlatGrid from "@/components/FlatGrid";
-import type { FlatStatus } from "@/components/FlatGrid";
 import Toast from "@/components/ui/Toast";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import MonthSelector from "@/components/MonthSelector";
 import FlatPaymentModal from "@/components/FlatPaymentModal";
-import { useAppConfig } from "@/hooks/useAppConfig";
-import { PAYMENT_MODE_LABELS } from "@/lib/constants";
+import { useSession } from "@/contexts/SessionContext";
+import { useToast } from "@/hooks/useToast";
+import { apiGetFlats, apiGetMonths, apiGetPayments, apiGetReminders, apiTrackReminder, apiConfirmCash } from "@/lib/api-client";
+import { buildFlatGrid, computeSecurityStats } from "@/lib/dashboard-helpers";
 import { findCurrentMonth } from "@/lib/types";
-import type { MonthData, PaymentData, FlatData, ReminderData, ToastState } from "@/lib/types";
-import {
-  type PaymentStatus,
-  type PaymentMode,
-} from "@/lib/constants";
+import type { FlatStatus } from "@/lib/types";
+import type { MonthData, PaymentData, FlatData, ReminderData } from "@/lib/types";
+import { PAYMENT_MODE_LABELS } from "@/lib/constants";
 
 export default function SecurityDashboard() {
   const [allFlats, setAllFlats] = useState<FlatData[]>([]);
@@ -26,28 +25,26 @@ export default function SecurityDashboard() {
   const [selectedMonth, setSelectedMonth] = useState<MonthData | null>(null);
   const [loading, setLoading] = useState(true);
   const [confirmingId, setConfirmingId] = useState<number | null>(null);
-  const [toast, setToast] = useState<ToastState>(null);
+  const { toast, showToast, clearToast } = useToast();
 
   // Reminders
   const [reminders, setReminders] = useState<ReminderData[]>([]);
   const [remindingFlatId, setRemindingFlatId] = useState<number | null>(null);
-  const { securityName, adminName } = useAppConfig();
+  const { config: { securityName, adminName } } = useSession();
 
   // Flat history modal
   const [modalFlat, setModalFlat] = useState<FlatStatus | null>(null);
+  const [modalFlatDetails, setModalFlatDetails] = useState<FlatData | null>(null);
   const [flatPayments, setFlatPayments] = useState<PaymentData[]>([]);
   const [loadingFlatHistory, setLoadingFlatHistory] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
-      const [flatsRes, monthsRes, paymentsRes] = await Promise.all([
-        fetch("/api/flats"),
-        fetch("/api/months"),
-        fetch("/api/payments"),
+      const [flatsData, monthsData, paymentsData] = await Promise.all([
+        apiGetFlats(),
+        apiGetMonths(),
+        apiGetPayments(),
       ]);
-      const flatsData = await flatsRes.json();
-      const monthsData = await monthsRes.json();
-      const paymentsData = await paymentsRes.json();
 
       setAllFlats(flatsData);
       setAllMonths(monthsData);
@@ -57,11 +54,11 @@ export default function SecurityDashboard() {
         setSelectedMonth(findCurrentMonth(monthsData));
       }
     } catch {
-      setToast({ message: "Failed to load data", type: "error" });
+      showToast("Failed to load data", "error");
     } finally {
       setLoading(false);
     }
-  }, [selectedMonth]);
+  }, [selectedMonth, showToast]);
 
   useEffect(() => {
     loadData();
@@ -71,10 +68,8 @@ export default function SecurityDashboard() {
   const loadReminders = useCallback(async () => {
     if (!selectedMonth) return;
     try {
-      const res = await fetch(`/api/reminders?monthId=${selectedMonth.id}`);
-      if (res.ok) {
-        setReminders(await res.json());
-      }
+      const data = await apiGetReminders(selectedMonth.id);
+      setReminders(data);
     } catch {
       // Silently fail for reminders
     }
@@ -87,23 +82,11 @@ export default function SecurityDashboard() {
   const handleConfirmCash = async (paymentId: number) => {
     setConfirmingId(paymentId);
     try {
-      const res = await fetch("/api/payments/security-confirm", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ paymentId }),
-      });
-      if (res.ok) {
-        setToast({ message: "Cash receipt confirmed!", type: "success" });
-        loadData();
-      } else {
-        const data = await res.json();
-        setToast({
-          message: data.error || "Failed to confirm",
-          type: "error",
-        });
-      }
-    } catch {
-      setToast({ message: "Network error", type: "error" });
+      await apiConfirmCash(paymentId);
+      showToast("Cash receipt confirmed!", "success");
+      loadData();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Network error", "error");
     } finally {
       setConfirmingId(null);
     }
@@ -113,23 +96,11 @@ export default function SecurityDashboard() {
     if (!selectedMonth) return;
     setRemindingFlatId(flatId);
     try {
-      const res = await fetch("/api/reminders", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ flatId, monthId: selectedMonth.id }),
-      });
-      if (res.ok) {
-        setToast({ message: "Reminder recorded!", type: "success" });
-        loadReminders();
-      } else {
-        const data = await res.json();
-        setToast({
-          message: data.error || "Failed to record reminder",
-          type: "error",
-        });
-      }
-    } catch {
-      setToast({ message: "Network error", type: "error" });
+      await apiTrackReminder(flatId, selectedMonth.id);
+      showToast("Reminder recorded!", "success");
+      loadReminders();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Network error", "error");
     } finally {
       setRemindingFlatId(null);
     }
@@ -137,22 +108,16 @@ export default function SecurityDashboard() {
 
   const handleFlatClick = async (flat: FlatStatus) => {
     setModalFlat(flat);
+    setModalFlatDetails(allFlats.find((f) => f.id === flat.flatId) || null);
     setLoadingFlatHistory(true);
     setFlatPayments([]);
 
     try {
-      // Fetch all payments (not filtered by month) and filter client-side by flatId
-      const res = await fetch("/api/payments");
-      if (res.ok) {
-        const allPayments: PaymentData[] = await res.json();
-        const filtered = allPayments.filter((p) => p.flatId === flat.flatId);
-        setFlatPayments(filtered);
-      }
+      const allPayments = await apiGetPayments();
+      const filtered = allPayments.filter((p) => p.flatId === flat.flatId);
+      setFlatPayments(filtered);
     } catch {
-      setToast({
-        message: "Failed to load payment history",
-        type: "error",
-      });
+      showToast("Failed to load payment history", "error");
     } finally {
       setLoadingFlatHistory(false);
     }
@@ -160,6 +125,7 @@ export default function SecurityDashboard() {
 
   const closeModal = () => {
     setModalFlat(null);
+    setModalFlatDetails(null);
     setFlatPayments([]);
   };
 
@@ -174,38 +140,9 @@ export default function SecurityDashboard() {
     (p) => selectedMonth && p.monthId === selectedMonth.id
   );
 
-  const gridData: FlatStatus[] = allFlats.map((flat) => {
-    const payment = monthPayments.find((p) => p.flatId === flat.id);
-    const isOverdue = selectedMonth
-      ? selectedMonth.status === "open" &&
-        new Date().getDate() > selectedMonth.dueDateDay
-      : false;
-    const lastReminder = reminders.find((r) => r.flatId === flat.id);
+  const gridData = buildFlatGrid(allFlats, monthPayments, reminders, selectedMonth);
 
-    return {
-      flatNumber: flat.flatNumber,
-      flatId: flat.id,
-      amount: flat.maintenanceAmount,
-      status: payment
-        ? (payment.status as PaymentStatus)
-        : isOverdue
-          ? ("overdue" as const)
-          : ("not_paid" as const),
-      paymentId: payment?.id,
-      lastRemindedAt: lastReminder?.sentAt || null,
-    };
-  });
-
-  const pendingSecurityPayments = monthPayments.filter(
-    (p) => p.status === "pending_security"
-  );
-
-  const paidCount = gridData.filter(
-    (f) =>
-      f.status === "paid" ||
-      f.status === "pending_collection" ||
-      f.status === "pending_verification"
-  ).length;
+  const { paidCount, pendingSecurityPayments } = computeSecurityStats(gridData, monthPayments);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -213,7 +150,7 @@ export default function SecurityDashboard() {
         <Toast
           message={toast.message}
           type={toast.type}
-          onClose={() => setToast(null)}
+          onClose={clearToast}
         />
       )}
       <NavBar title="Laurel Residency" subtitle="Security" />
@@ -300,6 +237,7 @@ export default function SecurityDashboard() {
       {/* Flat Payment History Modal */}
       <FlatPaymentModal
         flat={modalFlat}
+        flatDetails={modalFlatDetails}
         onClose={closeModal}
         payments={flatPayments}
         loadingHistory={loadingFlatHistory}

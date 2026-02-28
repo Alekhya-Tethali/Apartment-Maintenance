@@ -8,64 +8,36 @@ import Button from "@/components/ui/Button";
 import StatusBadge from "@/components/StatusBadge";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Toast from "@/components/ui/Toast";
-import { useAppConfig } from "@/hooks/useAppConfig";
+import { useSession } from "@/contexts/SessionContext";
+import { useToast } from "@/hooks/useToast";
+import { apiGetMonths, apiGetPayments } from "@/lib/api-client";
+import { getLateInfo, isEditable } from "@/lib/payment-helpers";
 import { PAYMENT_MODE_LABELS, MONTH_NAMES } from "@/lib/constants";
 import { findCurrentMonth } from "@/lib/types";
-import type { MonthData, PaymentData, ToastState } from "@/lib/types";
-
-function getLateInfo(payment: PaymentData): string | null {
-  const dueDate = new Date(payment.year, payment.month - 1, payment.dueDateDay);
-  const submittedDate = new Date(payment.submittedAt);
-
-  if (submittedDate <= dueDate) return null;
-
-  const diffDays = Math.ceil(
-    (submittedDate.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)
-  );
-
-  if (diffDays <= 0) return null;
-  return `Submitted ${diffDays} day${diffDays > 1 ? "s" : ""} after due date`;
-}
-
-function isEditable(payment: PaymentData): boolean {
-  // Can only edit if payment is still in initial pending state and month is open
-  if (payment.monthStatus === "closed") return false;
-  if (payment.status === "paid") return false;
-  if (payment.status === "pending_collection") return false;
-  // pending_verification without screenshot = upload failed, allow retry
-  // pending_verification with screenshot = waiting on admin
-  // pending_security = waiting on security confirmation
-  // rejected = can resubmit
-  return true;
-}
+import type { MonthData, PaymentData } from "@/lib/types";
 
 export default function ResidentDashboard() {
   const router = useRouter();
-  const [session, setSession] = useState<{ flatNumber: string; flatId: number } | null>(null);
+  const { session, config: { securityName, adminName }, loading: sessionLoading } = useSession();
   const [currentMonth, setCurrentMonth] = useState<MonthData | null>(null);
   const [currentPayment, setCurrentPayment] = useState<PaymentData | null>(null);
   const [pastPayments, setPastPayments] = useState<PaymentData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [toast, setToast] = useState<ToastState>(null);
-  const { securityName, adminName } = useAppConfig();
+  const { toast, showToast, clearToast } = useToast();
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (!sessionLoading) {
+      loadData();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionLoading]);
 
   async function loadData() {
     try {
-      const [sessionRes, monthsRes, paymentsRes] = await Promise.all([
-        fetch("/api/auth/me"),
-        fetch("/api/months"),
-        fetch("/api/payments"),
+      const [monthsData, paymentsData] = await Promise.all([
+        apiGetMonths(),
+        apiGetPayments(),
       ]);
-
-      const sessionData = await sessionRes.json();
-      const monthsData = await monthsRes.json();
-      const paymentsData = await paymentsRes.json();
-
-      setSession(sessionData);
 
       // Find current month — prefer open month matching current calendar month
       const bestMonth = findCurrentMonth(monthsData);
@@ -85,13 +57,13 @@ export default function ResidentDashboard() {
         .sort((a: PaymentData, b: PaymentData) => b.year - a.year || b.month - a.month);
       setPastPayments(past);
     } catch {
-      setToast({ message: "Failed to load data", type: "error" });
+      showToast("Failed to load data", "error");
     } finally {
       setLoading(false);
     }
   }
 
-  if (loading) {
+  if (loading || sessionLoading) {
     return <LoadingSpinner fullPage />;
   }
 
@@ -105,7 +77,7 @@ export default function ResidentDashboard() {
         <Toast
           message={toast.message}
           type={toast.type}
-          onClose={() => setToast(null)}
+          onClose={clearToast}
         />
       )}
       <NavBar

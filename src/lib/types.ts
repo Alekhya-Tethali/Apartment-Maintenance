@@ -43,8 +43,38 @@ export interface FlatData {
   id: number;
   flatNumber: string;
   maintenanceAmount: number;
-  hasPhone?: boolean;
-  phone?: string;
+  ownerName?: string;
+  isRented?: boolean;
+  tenantName?: string;
+  hasOwnerPhone?: boolean;
+  ownerPhone?: string;
+  hasTenantPhone?: boolean;
+  tenantPhone?: string;
+}
+
+export interface UpdateRequestData {
+  id: number;
+  flatId: number;
+  flatNumber: string;
+  requestType: "tenant_info" | "amount";
+  requestData: string;
+  status: "pending" | "approved" | "rejected";
+  requestedBy: string;
+  requestedAt: string;
+  reviewedAt?: string | null;
+  adminNote?: string | null;
+}
+
+export interface TenantInfoRequestPayload {
+  ownerName?: string;
+  isRented?: boolean;
+  tenantName?: string;
+  tenantPhone?: string;
+}
+
+export interface AmountRequestPayload {
+  amount: number;
+  scope: "this_month" | "all_future";
 }
 
 export interface ReminderData {
