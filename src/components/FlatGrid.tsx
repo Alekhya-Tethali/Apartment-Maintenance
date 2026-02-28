@@ -44,6 +44,11 @@ export default function FlatGrid({ flats, onFlatClick, securityName, adminName, 
             className={`${colorClass} rounded-xl p-3 text-center transition-all hover:opacity-90 active:scale-95`}
           >
             <div className="font-bold text-lg">{flat.flatNumber}</div>
+            {(flat.ownerName || flat.tenantName) && (
+              <div className={`text-[10px] truncate ${flat.isRented && flat.tenantName ? "opacity-90 italic" : "opacity-75"}`}>
+                {flat.isRented && flat.tenantName ? flat.tenantName : flat.ownerName}
+              </div>
+            )}
             <div className="text-xs opacity-90">₹{flat.amount.toLocaleString("en-IN")}</div>
             <div className="text-xs mt-1 font-medium opacity-80">{label}</div>
             {isDefaulter && flat.lastRemindedAt && (

@@ -55,13 +55,37 @@ export async function GET(request: Request) {
 
 export async function PATCH(request: Request) {
   const session = await getSession();
-  if (!session || session.role !== "admin") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
     const body = await request.json();
     const { flatId, amountScope, ...updates } = body;
+
+    // Residents can only update their own name
+    if (session.role === "resident") {
+      const { residentName } = body;
+      if (!residentName || typeof residentName !== "string" || residentName.length > 100) {
+        return NextResponse.json({ error: "Invalid name" }, { status: 400 });
+      }
+      // Get flat to check ownership and rental status
+      const flat = await db.select().from(flats).where(eq(flats.id, session.flatId!)).limit(1);
+      if (!flat[0]) {
+        return NextResponse.json({ error: "Flat not found" }, { status: 404 });
+      }
+      // If rented, update tenant name; otherwise update owner name
+      const updateField = flat[0].isRented
+        ? { tenantName: residentName.trim() }
+        : { ownerName: residentName.trim() };
+      await db.update(flats).set(updateField).where(eq(flats.id, session.flatId!));
+      return NextResponse.json({ success: true });
+    }
+
+    // Below is admin-only
+    if (session.role !== "admin") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     if (!flatId) {
       return NextResponse.json({ error: "Flat ID required" }, { status: 400 });

@@ -10,7 +10,7 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Toast from "@/components/ui/Toast";
 import { useSession } from "@/contexts/SessionContext";
 import { useToast } from "@/hooks/useToast";
-import { apiGetMonths, apiGetPayments } from "@/lib/api-client";
+import { apiGetMonths, apiGetPayments, apiGetFlats, apiUpdateResidentName } from "@/lib/api-client";
 import { getLateInfo, isEditable } from "@/lib/payment-helpers";
 import { PAYMENT_MODE_LABELS, MONTH_NAMES } from "@/lib/constants";
 import { findCurrentMonth } from "@/lib/types";
@@ -24,6 +24,10 @@ export default function ResidentDashboard() {
   const [pastPayments, setPastPayments] = useState<PaymentData[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast, showToast, clearToast } = useToast();
+  const [residentName, setResidentName] = useState<string>("");
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState("");
+  const [savingName, setSavingName] = useState(false);
 
   useEffect(() => {
     if (!sessionLoading) {
@@ -34,10 +38,22 @@ export default function ResidentDashboard() {
 
   async function loadData() {
     try {
-      const [monthsData, paymentsData] = await Promise.all([
+      const [monthsData, paymentsData, flatsData] = await Promise.all([
         apiGetMonths(),
         apiGetPayments(),
+        apiGetFlats(),
       ]);
+
+      // Find this resident's flat and get their display name
+      if (session?.flatId) {
+        const myFlat = flatsData.find((f) => f.id === session.flatId);
+        if (myFlat) {
+          const name = myFlat.isRented && myFlat.tenantName
+            ? myFlat.tenantName
+            : myFlat.ownerName || "";
+          setResidentName(name);
+        }
+      }
 
       // Find current month — prefer open month matching current calendar month
       const bestMonth = findCurrentMonth(monthsData);
@@ -63,6 +79,22 @@ export default function ResidentDashboard() {
     }
   }
 
+  const handleSaveName = async () => {
+    const trimmed = nameInput.trim();
+    if (!trimmed) return;
+    setSavingName(true);
+    try {
+      await apiUpdateResidentName(trimmed);
+      setResidentName(trimmed);
+      setEditingName(false);
+      showToast("Name updated!", "success");
+    } catch {
+      showToast("Failed to update name", "error");
+    } finally {
+      setSavingName(false);
+    }
+  };
+
   if (loading || sessionLoading) {
     return <LoadingSpinner fullPage />;
   }
@@ -85,6 +117,50 @@ export default function ResidentDashboard() {
         subtitle={session ? `Flat ${session.flatNumber}` : ""}
       />
       <main className="max-w-lg mx-auto p-4 space-y-4">
+        {/* Resident Name */}
+        <div className="flex items-center gap-2">
+          {editingName ? (
+            <div className="flex items-center gap-2 flex-1">
+              <input
+                type="text"
+                value={nameInput}
+                onChange={(e) => setNameInput(e.target.value)}
+                placeholder="Enter your name"
+                className="flex-1 px-3 py-1.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                autoFocus
+                onKeyDown={(e) => { if (e.key === "Enter") handleSaveName(); if (e.key === "Escape") setEditingName(false); }}
+              />
+              <button
+                onClick={handleSaveName}
+                disabled={savingName || !nameInput.trim()}
+                className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg disabled:opacity-50"
+              >
+                {savingName ? "..." : "Save"}
+              </button>
+              <button
+                onClick={() => setEditingName(false)}
+                className="px-2 py-1.5 text-xs text-slate-500 hover:text-slate-700"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => { setNameInput(residentName); setEditingName(true); }}
+              className="flex items-center gap-1.5 text-sm text-slate-600 hover:text-indigo-600 transition-colors"
+            >
+              {residentName ? (
+                <span>{residentName}</span>
+              ) : (
+                <span className="text-slate-400 italic">Add your name</span>
+              )}
+              <svg className="w-3.5 h-3.5 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+              </svg>
+            </button>
+          )}
+        </div>
+
         {/* Current Month Card */}
         {currentMonth ? (
           <Card>

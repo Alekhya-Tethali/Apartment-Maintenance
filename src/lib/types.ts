@@ -7,6 +7,9 @@ export interface FlatStatus {
   status: PaymentStatus | "not_paid" | "overdue";
   paymentId?: number;
   lastRemindedAt?: string | null;
+  ownerName?: string | null;
+  tenantName?: string | null;
+  isRented?: boolean;
 }
 
 export interface MonthData {

@@ -109,6 +109,9 @@ export const apiUpdateFlat = (data: {
   amountScope?: string;
 }) => apiFetch<{ success: boolean }>("/api/flats", { method: "PATCH", body: JSON.stringify(data) });
 
+export const apiUpdateResidentName = (residentName: string) =>
+  apiFetch<{ success: boolean }>("/api/flats", { method: "PATCH", body: JSON.stringify({ residentName }) });
+
 // ---------------------------------------------------------------------------
 // Months
 // ---------------------------------------------------------------------------

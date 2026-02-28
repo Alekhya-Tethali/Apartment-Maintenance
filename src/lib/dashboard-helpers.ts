@@ -29,6 +29,9 @@ export function buildFlatGrid(
           : ("not_paid" as const),
       paymentId: payment?.id,
       lastRemindedAt: lastReminder?.sentAt || null,
+      ownerName: flat.ownerName || null,
+      tenantName: flat.tenantName || null,
+      isRented: flat.isRented,
     };
   });
 }
